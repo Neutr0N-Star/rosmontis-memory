@@ -37,7 +37,7 @@
 <div class="mask" id="mask"></div>
 
 <!-- 记忆抽屉 -->
-<div class="drawer" id="drawer" hidden>
+<div class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="记忆" hidden>
   <div class="drawer-head">
     <h2>记忆</h2>
     <button id="closeDrawer" class="ghost">关</button>
@@ -52,10 +52,10 @@
   <button class="pop-new" id="newCard">＋ 新角色</button>
 </div>
 
-<!-- 新建角色 -->
-<div class="modal" id="newModal" hidden>
+<!-- 新建 / 编辑角色 -->
+<div class="modal" id="newModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" hidden>
   <div class="modal-box">
-    <h2>新角色</h2>
+    <h2 id="modalTitle">新角色</h2>
     <div class="up-row">
       <div class="avatar big" id="ncAvatarPrev">?</div>
       <div class="up-txt">
@@ -74,9 +74,9 @@
 </div>
 
 <!-- 设置 -->
-<div class="modal" id="setModal" hidden>
+<div class="modal" id="setModal" role="dialog" aria-modal="true" aria-labelledby="setTitle" hidden>
   <div class="modal-box">
-    <h2>设置</h2>
+    <h2 id="setTitle">设置</h2>
 
     <div class="up-row">
       <div class="bg-prev" id="bgPrev">无</div>
@@ -102,6 +102,7 @@
       <label><span>本地模型</span><input id="setLocal" placeholder="minicpm5-2b:q8-64k"></label>
     </div>
     <p class="set-note" id="setNote"></p>
+    <label class="check-row"><input id="dbgInfo" type="checkbox"> 显示 token 等计量信息</label>
 
     <div class="modal-acts">
       <button id="setCancel" class="ghost">取消</button>
@@ -111,10 +112,10 @@
 </div>
 
 <!-- 建卡向导：独立模态，不挂记忆管线 -->
-<div class="modal" id="wizModal" hidden>
+<div class="modal" id="wizModal" role="dialog" aria-modal="true" aria-labelledby="wizTitle" hidden>
   <div class="modal-box wiz-box">
     <div class="wiz-head">
-      <h2>建卡向导</h2>
+      <h2 id="wizTitle">建卡向导</h2>
       <button id="wizClose" class="ghost">关</button>
     </div>
     <div class="chat wiz-chat" id="wizChat"></div>

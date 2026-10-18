@@ -368,8 +368,8 @@ def create_app() -> FastAPI:
         return ok(get_mem().facts(session_id, status, limit))
 
     @app.get("/v1/state/{scope}", tags=["读"])
-    def get_state(scope: str, as_of: float | None = None):
-        return ok(get_mem().state_snapshot(scope, as_of))
+    def get_state(scope: str, session_id: str = "default", as_of: float | None = None):
+        return ok(get_mem().state_snapshot(scope, as_of, _no_wildcard(session_id)))
 
     @app.get("/v1/timeline/{entity_id}", tags=["读"])
     def get_timeline(entity_id: str):

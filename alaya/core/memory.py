@@ -332,16 +332,24 @@ class Memory:
             )
         return out
 
-    def state_snapshot(self, scope: str, as_of: float | None = None) -> dict:
+    def state_snapshot(
+        self, scope: str, as_of: float | None = None, session_id: str | None = None
+    ) -> dict:
+        # session_id 必须过滤。state_slot 表本来就有这个字段，早期单会话时
+        # 漏了过滤条件——加了角色卡之后才暴露：A 角色说"我叫晓星"，
+        # B 角色说"我叫小深"，两边会互相覆盖。
         as_of = as_of or time.time()
         with DB.reader(self.cfg.db_path) as conn:
             e = conn.execute("SELECT * FROM entity WHERE id=? OR norm_name=?", (scope, scope.lower())).fetchone()
             scope_id = e["id"] if e else scope
-            rows = conn.execute(
-                """SELECT * FROM state_slot WHERE scope=? AND since <= ?
-                   AND (until IS NULL OR until > ?) ORDER BY slot_key""",
-                (scope_id, as_of, as_of),
-            ).fetchall()
+            sql = """SELECT * FROM state_slot WHERE scope=? AND since <= ?
+                     AND (until IS NULL OR until > ?)"""
+            args = [scope_id, as_of, as_of]
+            if session_id:
+                sql += " AND session_id=?"
+                args.append(session_id)
+            sql += " ORDER BY slot_key"
+            rows = conn.execute(sql, args).fetchall()
         return {
             "scope": e["name"] if e else scope,
             "as_of": as_of,

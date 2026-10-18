@@ -255,7 +255,7 @@ async function loadMemory() {
       api(`/v1/episodes?session_id=${SESSION}&limit=30`),
       api(`/v1/facts?session_id=${SESSION}&limit=40`),
       api(`/v1/entities?session_id=${SESSION}&limit=20`),
-      api(`/v1/state/${encodeURIComponent('我')}`).catch(() => ({ slots: [] })),
+      api(`/v1/state/${encodeURIComponent('我')}?session_id=${SESSION}`).catch(() => ({ slots: [] })),
       api(`/v1/notebook?session_id=${SESSION}&limit=20`).catch(() => []),
     ]);
 

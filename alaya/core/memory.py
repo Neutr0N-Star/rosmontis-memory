@@ -340,7 +340,20 @@ class Memory:
         # B 角色说"我叫小深"，两边会互相覆盖。
         as_of = as_of or time.time()
         with DB.reader(self.cfg.db_path) as conn:
-            e = conn.execute("SELECT * FROM entity WHERE id=? OR norm_name=?", (scope, scope.lower())).fetchone()
+            # entity 查询必须带 session：库里每个会话都有一条 norm_name=「我」，
+            # 不过滤的话 OR norm_name 永远命中第一条（别的会话的），
+            # 拿着别人的 scope_id 再查本会话的槽 = 永远查无。
+            # session_id=None 时不带过滤（向后兼容老调用），此时可能错配。
+            if session_id:
+                e = conn.execute(
+                    "SELECT * FROM entity WHERE (id=? OR norm_name=?) AND session_id=?",
+                    (scope, scope.lower(), session_id),
+                ).fetchone()
+            else:
+                e = conn.execute(
+                    "SELECT * FROM entity WHERE id=? OR norm_name=?",
+                    (scope, scope.lower()),
+                ).fetchone()
             scope_id = e["id"] if e else scope
             sql = """SELECT * FROM state_slot WHERE scope=? AND since <= ?
                      AND (until IS NULL OR until > ?)"""

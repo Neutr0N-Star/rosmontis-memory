@@ -234,3 +234,14 @@ button.primary{background:#1b3a34;border-color:#2b5a50;color:#cfe8e2}
 }
 .modal-box input:focus,.modal-box textarea:focus{border-color:var(--accent)}
 .modal-acts{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+
+
+/* 设置 */
+.set-row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.set-row span{font-size:11px;color:var(--dimmer);min-width:56px}
+.set-row select{
+  flex:1;background:#0f151c;border:1px solid var(--line);border-radius:9px;
+  color:var(--text);padding:9px 11px;font:13px/1.4 var(--font);outline:none;
+}
+.set-note{font-size:11px;color:var(--dimmer);margin:6px 0 14px;line-height:1.7}
+#cloudBox,#localBox{margin-bottom:4px}

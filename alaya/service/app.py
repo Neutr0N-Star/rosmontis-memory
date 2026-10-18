@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -54,6 +55,77 @@ def _no_wildcard(session_id: str = "default") -> str:
     if session_id == "*":
         raise HTTPException(status_code=400, detail="session_id 不能是 *（内部保留）")
     return session_id or "default"
+
+
+_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
+
+
+def _read_env_file() -> dict:
+    d = {}
+    if _ENV_FILE.exists():
+        for line in _ENV_FILE.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            d[k.strip()] = v.strip()
+    return d
+
+
+def _write_env_file(patch: dict) -> None:
+    d = _read_env_file()
+    for k, v in patch.items():
+        if v is None or v == "":
+            d.pop(k, None)
+        else:
+            d[k] = str(v)
+    lines = ["# 藏识 Alaya 本地配置（自动生成，密钥不要提交）"]
+    for k in sorted(d):
+        lines.append(f"{k}={d[k]}")
+    _ENV_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    try:
+        _ENV_FILE.chmod(0o600)
+    except Exception:
+        pass
+
+
+def _reload_runtime():
+    # 改完配置要重建 Memory 与 Harness，否则还在用旧模型
+    global _mem, _harness
+    _mem = None
+    _harness = None
+    for k in (
+        "ALAYA_LLM_HOT", "ALAYA_LLM_DEEP", "ALAYA_LLM_HOT_MODEL", "ALAYA_LLM_DEEP_MODEL",
+        "ALAYA_OPENAI_BASE", "ALAYA_OPENAI_KEY", "ALAYA_OPENAI_MODEL", "ALAYA_LLM_TEMP",
+    ):
+        os.environ.pop(k, None)
+    for k, v in _read_env_file().items():
+        os.environ.setdefault(k, v)
+    try:
+        get_mem()
+        get_harness()
+        return True
+    except Exception as e:
+        log.warning("reload after settings failed: %s", e)
+        return False
+
+
+class SettingsIn(BaseModel):
+    llm_hot: str | None = None
+    llm_deep: str | None = None
+    llm_hot_model: str | None = None
+    llm_deep_model: str | None = None
+    openai_base: str | None = None
+    openai_key: str | None = None
+    openai_model: str | None = None
+    temperature: float | None = None
+
+
+class OnboardIn(BaseModel):
+    session_id: str = "default"
+    name: str = ""
+    desc: str = ""
+    seed: str = ""
 
 
 def get_harness():
@@ -371,6 +443,81 @@ def create_app() -> FastAPI:
     @app.post("/v1/session/sleep", tags=["Harness"])
     def post_sleep(session_id: str = "default"):
         return ok(get_harness().sleep(session_id))
+
+    @app.get("/v1/settings", tags=["设置"])
+    def get_settings():
+        # 密钥不回显，只说有没有
+        cfg = get_mem().cfg
+        return ok(
+            {
+                "llm_hot": cfg.llm_hot,
+                "llm_deep": cfg.llm_deep,
+                "llm_hot_model": cfg.llm_hot_model,
+                "llm_deep_model": cfg.llm_deep_model,
+                "openai_base": cfg.openai_base,
+                "openai_model": cfg.openai_model,
+                "openai_key_set": bool(cfg.openai_key),
+                "temperature": cfg.llm_temperature,
+                "embed_provider": cfg.embed_provider,
+                "embed_model": cfg.embed_model,
+            }
+        )
+
+    @app.post("/v1/settings", tags=["设置"])
+    def post_settings(body: SettingsIn):
+        patch = {}
+        for env_key, val in (
+            ("ALAYA_LLM_HOT", body.llm_hot),
+            ("ALAYA_LLM_DEEP", body.llm_deep),
+            ("ALAYA_LLM_HOT_MODEL", body.llm_hot_model),
+            ("ALAYA_LLM_DEEP_MODEL", body.llm_deep_model),
+            ("ALAYA_OPENAI_BASE", body.openai_base),
+            ("ALAYA_OPENAI_KEY", body.openai_key),
+            ("ALAYA_OPENAI_MODEL", body.openai_model),
+            ("ALAYA_LLM_TEMP", body.temperature),
+        ):
+            if val is not None:
+                patch[env_key] = val
+        if not patch:
+            return fail("empty", "没有要改的", 422)
+        _write_env_file(patch)
+        reloaded = _reload_runtime()
+        return ok({"written": sorted(patch), "reloaded": reloaded})
+
+    @app.post("/v1/onboard", tags=["Harness"])
+    def post_onboard(body: OnboardIn):
+        # 引导：新角色第一次见面由她先开口。
+        # 玩家面对空屏不知道该说什么，这是最好用的一处改善——
+        # 而且她开口的同时就把"自己是谁"写进了记忆，后面才有得记。
+        h = get_harness()
+        mem = h.mem
+        sid = body.session_id
+        try:
+            mem.seed(sid)
+            if body.seed:
+                mem.persona_add(
+                    f"你是{body.name or '她'}。{body.seed}", sid, "identity",
+                    author="self", protected=True, priority=100,
+                )
+            prompt = (
+                f"你要第一次见一个陌生人。\n\n"
+                f"你的身份：{body.seed or ('你是' + (body.name or '她') + '。你记得来过的人，但不多问。')}\n"
+                f"{'关于你：' + body.desc if body.desc else ''}\n\n"
+                "说两到三句话：先自然地打个招呼，然后问对方一个具体问题"
+                "（比如怎么称呼、今天过得怎样、来这儿做什么）。\n"
+                "要求：口语，不超过 60 字，不要自我介绍式的长篇，不要说自己是 AI。"
+            )
+            reply = mem.llm_hot.chat("", prompt, max_tokens=180)
+            reply = _clean_reply(reply or "").strip()
+            if not reply:
+                return fail("llm_unavailable", "她没开口（模型没响应）", 503)
+
+            # 她说的第一句也要进记忆，否则下次她不知道自己说过什么
+            mem.ingest_async(reply, sid, role="assistant")
+            return ok({"reply": reply})
+        except Exception as e:
+            log.exception("onboard failed")
+            return fail("onboard_failed", str(e), 500)
 
     # ── 做梦与节拍 ────────────────────────────────────────
     @app.post("/v1/dream", tags=["做梦"])

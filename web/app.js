@@ -370,6 +370,93 @@ function updateMeta() {
   $('#meta').textContent = state.count ? `已聊 ${state.count} 轮` : '';
 }
 
+/* ── 引导：新角色第一次见面，由她先开口 ────────────────── */
+async function onboard(session, name, desc, seed) {
+  const ph = addTyping();
+  try {
+    const r = await api('/v1/onboard', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: session, name, desc, seed }),
+    });
+    clearInterval(ph._timer);
+    ph.remove();
+    clearEmpty();
+    addMsg('ai', r.reply);
+  } catch (e) {
+    clearInterval(ph._timer);
+    ph.remove();
+    // 引导失败不该挡住聊天，退回空态让她自己开口
+    addError(e.code === 'llm_unavailable' ? '她还没醒（模型没响应），你自己先说一句也行' : `开场没生成：${e.message}`);
+  }
+}
+
+/* ── 设置 ────────────────────────────────────────────── */
+let settingsCache = null;
+
+async function openSettings() {
+  $('#setModal').hidden = false;
+  $('#setNote').textContent = '读中…';
+  try {
+    const s = await api('/v1/settings');
+    settingsCache = s;
+    const cloud = s.llm_hot === 'openai';
+    $('#selProv').value = cloud ? 'openai' : 'ollama';
+    $('#setBase').value = s.openai_base || '';
+    $('#setKey').value = '';
+    $('#setModel').value = s.openai_model || '';
+    $('#setLocal').value = cloud ? '' : s.llm_hot_model || '';
+    toggleCloud(cloud);
+    $('#setNote').innerHTML = cloud
+      ? `当前：<b>${esc(s.openai_model || '未填')}</b> · 密钥${s.openai_key_set ? '已配置' : '<span style="color:var(--danger)">未填</span>'}`
+      : `当前：本地 <b>${esc(s.llm_hot_model)}</b><br>本地小模型做陪伴聊天质量有限，建议换云端。`;
+  } catch (e) {
+    $('#setNote').textContent = `读不到设置：${e.message}`;
+  }
+}
+
+function toggleCloud(cloud) {
+  $('#cloudBox').hidden = !cloud;
+  $('#localBox').hidden = cloud;
+}
+
+async function saveSettings() {
+  const cloud = $('#selProv').value === 'openai';
+  const body = {};
+  if (cloud) {
+    body.llm_hot = 'openai';
+    body.llm_deep = 'openai';
+    body.openai_base = $('#setBase').value.trim();
+    body.openai_model = $('#setModel').value.trim() || 'deepseek-chat';
+    const key = $('#setKey').value.trim();
+    if (key) body.openai_key = key;
+    if (!body.openai_base) {
+      toast('云端要填接口地址');
+      return;
+    }
+    if (!key && !(settingsCache && settingsCache.openai_key_set)) {
+      toast('云端要填密钥');
+      return;
+    }
+  } else {
+    body.llm_hot = 'ollama';
+    body.llm_deep = 'ollama';
+    body.llm_hot_model = $('#setLocal').value.trim() || 'minicpm5-2b:q8-64k';
+    body.llm_deep_model = body.llm_hot_model;
+  }
+  try {
+    const r = await api('/v1/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    $('#setModal').hidden = true;
+    toast(r.reloaded ? '换好了' : '写进去了，但重载失败，重启服务生效');
+  } catch (e) {
+    toast(`没存成：${e.message}`);
+  }
+}
+
 /* ── 角色卡 ──────────────────────────────────────────── */
 function renderCardPop() {
   const cur = CARDS.find((c) => c.session === SESSION);
@@ -444,7 +531,7 @@ async function createCard() {
   $('#ncDesc').value = '';
   $('#ncSeed').value = '';
   await switchCard(session);
-  toast(`建好了：${name}`);
+  await onboard(session, name, desc, seed);
 }
 
 /* ── 启动 ────────────────────────────────────────────── */
@@ -494,6 +581,10 @@ async function boot() {
   });
   $('#ncCancel').addEventListener('click', () => { $('#newModal').hidden = true; });
   $('#ncSave').addEventListener('click', createCard);
+  $('#btnSettings').addEventListener('click', openSettings);
+  $('#setCancel').addEventListener('click', () => { $('#setModal').hidden = true; });
+  $('#setSave').addEventListener('click', saveSettings);
+  $('#selProv').addEventListener('change', (e) => toggleCloud(e.target.value === 'openai'));
   document.addEventListener('click', (e) => {
     if (!e.target.closest('#cardPop') && !e.target.closest('#brand')) $('#cardPop').hidden = true;
   });

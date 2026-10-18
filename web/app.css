@@ -245,3 +245,8 @@ button.primary{background:#1b3a34;border-color:#2b5a50;color:#cfe8e2}
 }
 .set-note{font-size:11px;color:var(--dimmer);margin:6px 0 14px;line-height:1.7}
 #cloudBox,#localBox{margin-bottom:4px}
+
+/* 长角色名不能把顶栏按钮挤成竖排 */
+.name{max-width:34vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pop{max-width:320px}
+.pop-item b,.pop-item span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

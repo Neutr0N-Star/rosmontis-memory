@@ -222,8 +222,10 @@ async function send(textOverride) {
     const msg =
       e.name === 'AbortError'
         ? '等太久了，可能是模型卡住'
+        : /401|invalid.*key|Unauthorized/i.test(e.message)
+        ? '密钥好像不对，去「设置」里检查一下'
         : e.code === 'llm_unavailable'
-        ? '她这边没接上话（模型没响应）'
+        ? `她这边没接上话：${e.message.replace(/^模型没有返回内容[:：]?/, '')}`
         : e.message.includes('Failed to fetch')
         ? '连不上服务，看看后台还开着吗'
         : e.message;
@@ -405,7 +407,7 @@ async function openSettings() {
     $('#setBase').value = s.openai_base || '';
     $('#setKey').value = '';
     $('#setModel').value = s.openai_model || '';
-    $('#setLocal').value = cloud ? '' : s.llm_hot_model || '';
+    $('#setLocal').value = s.llm_hot_model || ''; // 恒回填：切到本地时不能把名字弄丢
     toggleCloud(cloud);
     $('#setNote').innerHTML = cloud
       ? `当前：<b>${esc(s.openai_model || '未填')}</b> · 密钥${s.openai_key_set ? '已配置' : '<span style="color:var(--danger)">未填</span>'}`
@@ -471,6 +473,10 @@ function renderCardPop() {
 }
 
 async function switchCard(sessionId) {
+  if (state.busy) {
+    toast('她话还没说完，等一下再切');
+    return;
+  }
   if (sessionId === SESSION) {
     $('#cardPop').hidden = true;
     return;

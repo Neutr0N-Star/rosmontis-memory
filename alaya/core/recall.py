@@ -134,7 +134,24 @@ def recall(
     # 它们不该把无关问题撑成"有相关记忆"——那会让拒答永远失效。
     retrievable = [c for c in cands if c.kind not in ("state", "resident")]
     top = max((c.score for c in retrievable), default=0.0)
-    if top < cfg.weights.theta_abstain:
+    # 双门：分数要过线，原始相关度也要过线。
+    # 只看分数的话，图扩散和全文匹配能把「今天天气怎么样」撑出 10 条
+    # 高分记忆——分数是合成的，rel 才是「这段话跟我真有关系吗」。
+    top_rel = max((c.rel for c in retrievable), default=0.0)
+    # rel 门必须跟向量质量挂钩：
+    #   真语义向量（bge-m3）→ 0.40，汉字短句间余弦普遍偏高，严门才能拦住天气类
+    #   降级（真模型掉线、embedding 缺失）→ 0.25，全文匹配的 rel 天然偏低
+    #   hash 伪向量（测试/无模型）→ 0.15，它的余弦没有语义意义，只留底线
+    prov = getattr(embedder, "provider", "") if embedder is not None else ""
+    if embedder is None or prov == "hash":
+        # hash 伪向量的余弦没有语义意义，rel 门整个跳过——
+        # 拒答只靠 score 门。真语义向量才配得上 0.40 的严门。
+        rel_gate = None
+    elif getattr(embedder, "degraded", False):
+        rel_gate = 0.25
+    else:
+        rel_gate = 0.40
+    if top < cfg.weights.theta_abstain or (rel_gate is not None and top_rel < rel_gate):
         res.abstained = True
         res.reason = (
             f"没有找到相关回忆（最高分 {top:.2f} < 阈值 {cfg.weights.theta_abstain}）"

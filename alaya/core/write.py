@@ -206,6 +206,10 @@ def _resolve_fact(
     now: float,
     embedder=None,
 ) -> dict:
+    # 谓词归一：LLM 会自由发挥（"搬到城东"→搬到），不归一的话
+    # STATE_PREDICATES 查不到，状态槽就静默丢了。
+    while f.predicate in EX._PREDICATE_ALIASES:
+        f.predicate = EX._PREDICATE_ALIASES[f.predicate]
     # 事实也必须有向量，否则它在稠密召回里永远不存在——只能靠全文或图谱被捞到
     emb = None
     if embedder is not None:
@@ -275,6 +279,17 @@ def _resolve_fact(
         }
 
     new_id = _insert_fact(conn, session_id, subj_id, f, obj_ent, vfrom, ep_id, t_event, emb)
+
+    # 确定性兜底：位置/工作/关系类事实直接驱动状态槽。
+    # 不能指望 LLM 记得产出 state_changes——它经常忘，而槽是检索的主干，
+    # 漏了比漏一条 fact 严重得多。「住在城东」本身就是 city=城东 的变更。
+    if f.predicate in EX.STATE_PREDICATES and int(f.polarity) == 1:
+        _apply_state(
+            conn, session_id,
+            EX.StateCand(scope=f.subject, slot=EX.STATE_PREDICATES[f.predicate], value=f.obj),
+            ent_cache, t_event, now,
+        )
+
     return {"action": "ADD", "fact": new_id, "predicate": f.predicate}
 
 

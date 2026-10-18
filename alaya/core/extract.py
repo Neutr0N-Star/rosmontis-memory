@@ -32,6 +32,18 @@ STATE_PREDICATES = {
     "关系是": "relationship",
 }
 
+# LLM 会自由发挥谓词（"搬到城东"→搬到），归一到标准谓词再驱动状态槽。
+# 不归一的话 STATE_PREDICATES 查不到，槽就静默丢了。
+_PREDICATE_ALIASES = {
+    "搬到": "住在",
+    "搬回": "住在",
+    "迁到": "住在",
+    "搬去": "住在",
+    "跳槽到": "工作在",
+    "跳槽去": "工作在",
+    "入职": "工作在",
+}
+
 ENTITY_TYPES = ("person", "place", "thing", "concept", "org")
 
 _MEMORY_TYPES = ("fact", "preference", "emotion", "lesson", "principle", "plan", "constraint")
@@ -87,6 +99,8 @@ _SYS = """你是一个记忆提炼器。从对话里提取值得长期记住的�
 铁律：
 - 如果没有值得记住的东西，返回空数组。不要为了不返回空而编造。
 - 每类最多 2 条。宁少勿滥。
+- **位置、工作、关系这类会变的，必须同时产出 state_changes**（slot: job/city/relationship）——"搬到、搬回、跳槽、分手"都是变更，哪怕话语里没明说"我现在住在"
+- **犹豫、打算、纠结（"要不要""在考虑""还没想好"）也是记忆**：predicate 用"计划"，memory_type 用 plan。这类最容易漏
 - 否定要正确表达：polarity = -1 表示"不喜欢/不是/没有"
 
 字段说明：
@@ -117,6 +131,18 @@ _FEWSHOT = """<示例1>
 <示例4>
 对话：帮我看看这个报错，grep 又返回空了。
 输出：{"entities":[],"facts":[],"state_changes":[],"theme":null}
+
+<示例5>
+对话：我上个月搬到城东了，离公司近多了。
+输出：{"entities":[{"name":"城东","type":"place"}],"facts":[{"subject":"我","predicate":"住在","object":"城东","polarity":1,"confidence":0.9,"valid_from":"上个月","memory_type":"fact"}],"state_changes":[{"scope":"我","slot":"city","value":"城东"}],"theme":"搬家"}
+
+<示例6>
+对话：其实我又搬回城西了，还是那边住着习惯。
+输出：{"entities":[{"name":"城西","type":"place"}],"facts":[{"subject":"我","predicate":"住在","object":"城西","polarity":1,"confidence":0.9,"valid_from":null,"memory_type":"fact"}],"state_changes":[{"scope":"我","slot":"city","value":"城西"}],"theme":"搬家"}
+
+<示例7>
+对话：最近在想要不要辞职去做点自己的事，还没想好。
+输出：{"entities":[],"facts":[{"subject":"我","predicate":"计划","object":"辞职去做自己的事","polarity":1,"confidence":0.6,"valid_from":null,"memory_type":"plan"}],"state_changes":[],"theme":"职业纠结"}
 """
 
 

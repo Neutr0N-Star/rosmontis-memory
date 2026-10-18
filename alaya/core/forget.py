@@ -66,7 +66,7 @@ def run(cfg: Config, llm: LLM | None, session_id: str | None = None, now: float 
     """完整遗忘周期：折叠同主题的低价值情节，再归档冷条目。"""
     now = now or time.time()
     rep = ForgetReport()
-    sid = session_id or "*"
+    sid = session_id or "default"
 
     with DB.reader(cfg.db_path) as conn:
         rows = conn.execute(

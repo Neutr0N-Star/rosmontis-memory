@@ -55,6 +55,7 @@ class LLM:
         return False
 
     def chat(self, system: str, user: str, max_tokens: int = 700, json_mode: bool = False) -> str | None:
+        self.last_error = None
         """返回原始文本；失败返回 None。"""
         if self.provider == "ollama":
             return self._ollama(system, user, max_tokens, json_mode)
@@ -99,6 +100,8 @@ class LLM:
             return None
 
     def _openai(self, system: str, user: str, max_tokens: int, json_mode: bool) -> str | None:
+        # 失败原因要留在 last_error 里——401（密钥错）和超时对用户是两件事，
+        # 全吞成 None 的话，前端只会显示「模型没响应」，用户不知道去查密钥。
         payload = {
             "model": self.openai_model,
             "messages": [

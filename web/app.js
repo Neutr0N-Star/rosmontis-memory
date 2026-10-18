@@ -687,11 +687,29 @@ async function wizDone() {
   } catch (e) {
     toast(`种子没写进去：${e.message}`);
   }
+  // 开场白要真的落库，否则向导问了第四问却不用，toast 还在骗人
+  if (wiz.data.firstMes) {
+    try {
+      await api('/v1/episodes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: wiz.data.firstMes,
+          session_id: card.session,
+          role: 'assistant',
+        }),
+      });
+    } catch (e) {
+      // 落库失败也要让她在界面上开口，不能静默
+      toast(`开场白没存进记忆：${e.message}`);
+    }
+  }
+
   closeLayer('wizModal');
   wiz.active = false;
   renderCardPop();
   await useCard(card.session);
-  toast(`「${card.name}」建好了，TA 应该已经先开口了`);
+  toast(`「${card.name}」建好了`);
 }
 
 function wizClose() {
@@ -944,11 +962,10 @@ function bindAll() {
   $('#btnWizard').addEventListener('click', wizStart);
 
   // 角色卡与新建
+  // 统一入口：角色浮层的「＋新角色」和顶栏「建卡」都走向导，不维持第二套表单
   $('#newCard').addEventListener('click', () => {
-    resetCardForm();
     closeLayer('cardPop');
-    openLayer('newModal');
-    $('#ncName').focus();
+    wizStart();
   });
   $('#ncCancel').addEventListener('click', () => {
     resetCardForm();

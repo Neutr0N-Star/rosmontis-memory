@@ -481,7 +481,6 @@ function addWiz(role, text) {
 }
 
 function wizStart() {
-  show('wizard');
   wiz.step = 0;
   wiz.data = {};
   wiz.active = true;
@@ -550,7 +549,7 @@ async function wizDone() {
     toast(`种子没写进去：${e.message}`);
   }
   wiz.active = false;
-  renderCards();
+  renderCardPop();
   await switchCard(card.session);
   toast(`「${card.name}」建好了，TA 应该已经先开口了`);
 }

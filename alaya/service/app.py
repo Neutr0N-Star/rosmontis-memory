@@ -519,6 +519,12 @@ def create_app() -> FastAPI:
             log.exception("onboard failed")
             return fail("onboard_failed", str(e), 500)
 
+    @app.post("/v1/wipe", tags=["维护"])
+    def post_wipe(session_id: str):
+        """删掉一个角色的全部数据。不可逆。"""
+        sid = _no_wildcard(session_id)
+        return ok(get_mem().wipe(sid))
+
     # ── 做梦与节拍 ────────────────────────────────────────
     @app.post("/v1/dream", tags=["做梦"])
     def post_dream(session_id: str = "default", force: bool = False):

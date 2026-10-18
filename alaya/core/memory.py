@@ -332,6 +332,28 @@ class Memory:
             )
         return out
 
+    _WIPE_TABLES = (
+        "retrieval_log", "hyperedge_member", "hyperedge", "state_slot",
+        "tombstone", "fact", "entity", "persona",
+        "episode_fts", "episode", "observation", "page",
+    )
+
+    def wipe(self, session_id: str = "default") -> dict:
+        """删掉一个角色的全部数据。
+
+        只动带 session_id 的表。这个操作不可逆，调用方必须先确认。
+        """
+        counts = {}
+        with DB.tx(self.cfg.db_path) as conn:
+            for t in self._WIPE_TABLES:
+                try:
+                    col = "episode_id" if t == "episode_fts" else "session_id"
+                    cur = conn.execute(f"DELETE FROM {t} WHERE {col}=?", (session_id,))
+                    counts[t] = cur.rowcount
+                except Exception:
+                    pass
+        return {"session_id": session_id, "wiped": counts}
+
     def state_snapshot(
         self, scope: str, as_of: float | None = None, session_id: str | None = None
     ) -> dict:

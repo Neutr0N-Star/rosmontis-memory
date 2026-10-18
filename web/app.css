@@ -338,3 +338,18 @@ button.primary{background:#2b2418;border-color:#4a3a24;color:#ecd9b8}
 /* 聊天背景：有图时 body 加遮罩保文字可读 */
 body.has-bg #chat{background:rgba(17,18,20,.72);backdrop-filter:none}
 body.has-bg{background-size:cover;background-position:center}
+
+
+/* 建卡向导：独立模式，轻量，不挂记忆 */
+.wizard-wrap{flex:1;display:flex;flex-direction:column;min-height:0;width:100%}
+.wiz-actions{display:flex;gap:9px;justify-content:center;padding:0 18px 16px}
+.wiz-actions button{min-width:110px}
+.wiz-note{
+  text-align:center;font-size:10.5px;color:var(--dimmer);padding:0 18px 14px;
+  font-family:var(--mono);
+}
+.pop-item .row-btns{display:flex;gap:4px;margin-top:5px}
+.pop-item .row-btns button{
+  font-size:10px;padding:3px 9px;border-radius:6px;color:var(--dimmer);min-height:0;
+}
+.pop-item .row-btns button:hover{color:var(--accent);border-color:var(--accent-dim)}

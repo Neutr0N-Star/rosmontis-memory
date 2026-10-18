@@ -425,6 +425,115 @@ async function onboard(session, name, desc, seed) {
   }
 }
 
+/* ── 建卡向导：独立模式 ──────────────────────────────────
+ * 预制提示词的步骤式引导，纯前端，不经过记忆管线——
+ * 向导里说的话不会变成任何角色的记忆。
+ */
+const WIZ_STEPS = [
+  { key: 'name',     q: '先给这个角色起个名字？',                     ph: '比如：深夜便利店' },
+  { key: 'desc',     q: '用一句话介绍 TA（显示在角色列表里）。',       ph: '话不多，记性很好' },
+  { key: 'seed',     q: 'TA 的来历是什么？这会成为 TA 记忆的起点。',   ph: '你在这里待了很多年…' },
+  { key: 'firstMes', q: 'TA 开口第一句说什么？',                      ph: '……' },
+];
+
+const wiz = { step: -1, data: {}, active: false };
+
+function addWiz(role, text) {
+  const el = document.createElement('div');
+  el.className = `msg ${role}`;
+  if (role === 'sys') {
+    el.textContent = text;
+  } else if (role === 'me') {
+    const b = document.createElement('div');
+    b.className = 'body';
+    b.textContent = text;
+    el.appendChild(b);
+  } else {
+    const b = document.createElement('div');
+    b.className = 'body';
+    b.textContent = text;
+    el.appendChild(b);
+  }
+  $('#wizChat').appendChild(el);
+  $('#wizChat').scrollTop = $('#wizChat').scrollHeight;
+  return el;
+}
+
+function wizStart() {
+  show('wizard');
+  wiz.step = 0;
+  wiz.data = {};
+  wiz.active = true;
+  $('#wizChat').innerHTML = '';
+  $('#wizActions').hidden = true;
+  $('#wizInput').disabled = false;
+  $('#wizSend').disabled = false;
+  $('#wizInput').placeholder = WIZ_STEPS[0].ph;
+  addWiz('sys', '建卡向导 · 四个小问题，答完就有了一个新角色');
+  addWiz('ai', WIZ_STEPS[0].q);
+}
+
+function wizAnswer() {
+  if (!wiz.active || wiz.step >= WIZ_STEPS.length) return;
+  const input = $('#wizInput');
+  const val = input.value.trim();
+  if (!val) return;
+  input.value = '';
+  addWiz('me', val);
+  wiz.data[WIZ_STEPS[wiz.step].key] = val;
+
+  wiz.step++;
+  if (wiz.step < WIZ_STEPS.length) {
+    setTimeout(() => {
+      addWiz('ai', WIZ_STEPS[wiz.step].q);
+      $('#wizInput').placeholder = WIZ_STEPS[wiz.step].ph;
+    }, 250);
+  } else {
+    wizConfirm();
+  }
+}
+
+function wizConfirm() {
+  wiz.active = false;
+  $('#wizInput').disabled = true;
+  $('#wizSend').disabled = true;
+  $('#wizInput').placeholder = '确认后创建';
+  addWiz('ai', '都齐了。确认一下：');
+  addWiz('sys',
+    `名字：${wiz.data.name}\n一句话：${wiz.data.desc || '（无）'}\n来历：${wiz.data.seed || '（空白开始）'}\n开场：${wiz.data.firstMes || '……'}`);
+  $('#wizActions').hidden = false;
+}
+
+async function wizDone() {
+  const card = app.cards.add({
+    name: wiz.data.name,
+    desc: wiz.data.desc,
+    seed: wiz.data.seed,
+    firstMes: wiz.data.firstMes,
+  });
+  await app.cards.save();
+  try {
+    await api('/v1/persona', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: `你是${card.name}。${wiz.data.seed || '你记得来过的人，但不多问。'}`,
+        session_id: card.session,
+        section: 'identity',
+        author: 'self',
+        protected: true,
+        priority: 100,
+      }),
+    });
+  } catch (e) {
+    toast(`种子没写进去：${e.message}`);
+  }
+  wiz.active = false;
+  renderCards();
+  await enterCard(card.session);
+  toast(`「${card.name}」建好了，TA 应该已经先开口了`);
+}
+
 /* ── 设置 ────────────────────────────────────────────── */
 let settingsCache = null;
 
@@ -524,12 +633,45 @@ function renderCardPop() {
     }
   }
   $('#cardList').innerHTML = CARDS.map(
-    (c) => `<button class="pop-item ${c.session === SESSION ? 'on' : ''}" data-card="${esc(c.session)}">
-      <b>${esc(c.name)}</b>${c.desc ? `<span>${esc(c.desc)}</span>` : ''}</button>`
+    (c) => `<div class="pop-item ${c.session === SESSION ? 'on' : ''}" data-card="${esc(c.session)}">
+      <b>${esc(c.name)}</b>${c.desc ? `<span>${esc(c.desc)}</span>` : ''}
+      <div class="row-btns">
+        <button data-edit="${esc(c.session)}">改</button>
+        <button data-delcard="${esc(c.session)}">删</button>
+      </div>
+    </div>`
   ).join('');
   $('#cardList')
     .querySelectorAll('[data-card]')
-    .forEach((b) => b.addEventListener('click', () => switchCard(b.dataset.card)));
+    .forEach((b) => b.addEventListener('click', (ev) => {
+      if (ev.target.closest('[data-edit]') || ev.target.closest('[data-delcard]')) return;
+      switchCard(b.dataset.card);
+    }));
+  $('#cardList')
+    .querySelectorAll('[data-edit]')
+    .forEach((b) => b.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      editCard(b.dataset.edit);
+    }));
+  $('#cardList')
+    .querySelectorAll('[data-delcard]')
+    .forEach((b) => b.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      const sid = b.dataset.delcard;
+      const card = CARDS.find((x) => x.session === sid);
+      if (!confirm(`删掉「${card ? card.name : sid}」？TA 的全部记忆也会一起删掉，找不回来。`)) return;
+      try {
+        await api(`/v1/wipe?session_id=${encodeURIComponent(sid)}`, { method: 'POST' });
+      } catch (e) { /* 记忆清理失败不阻断 */ }
+      CARDS = CARDS.filter((x) => x.session !== sid);
+      saveCards(CARDS);
+      if (SESSION === sid) {
+        SESSION = CARDS[0] ? CARDS[0].session : '';
+        $('#chat').innerHTML = '';
+      }
+      renderCardPop();
+      toast('删了');
+    }));
 }
 
 async function switchCard(sessionId) {
@@ -560,6 +702,21 @@ async function switchCard(sessionId) {
   $('#input').focus();
 }
 
+function editCard(sessionId) {
+  const card = CARDS.find((x) => x.session === sessionId);
+  if (!card) return;
+  editingSession = sessionId;
+  $('#ncName').value = card.name;
+  $('#ncDesc').value = card.desc || '';
+  $('#ncAvatarPrev').style.backgroundImage = card.avatar ? `url(${card.avatar})` : '';
+  $('#ncAvatarPrev').style.backgroundSize = 'cover';
+  $('#ncAvatarPrev').textContent = card.avatar ? '' : card.name.charAt(0);
+  $('#newModal').hidden = false;
+  $('#ncName').focus();
+}
+
+let editingSession = null;
+
 async function createCard() {
   const name = ($('#ncName').value || '').trim();
   if (!name) {
@@ -589,6 +746,25 @@ async function createCard() {
     toast(`种子没写进去：${e.message}`);
   }
 
+  if (editingSession) {
+    const c = CARDS.find((x) => x.session === editingSession);
+    if (c) {
+      c.name = name;
+      c.desc = desc;
+      if (avatarData) c.avatar = avatarData;
+      saveCards(CARDS);
+      if (SESSION === editingSession) {
+        app.card = c;
+        renderCardPop();
+      }
+    }
+    $('#newModal').hidden = true;
+    window._pendingAvatar = '';
+    editingSession = null;
+    $('#ncName').value = ''; $('#ncDesc').value = ''; $('#ncSeed').value = '';
+    toast('改好了');
+    return;
+  }
   CARDS.push({ session, name, desc, avatar: avatarData });
   window._pendingAvatar = '';
   saveCards(CARDS);
@@ -662,6 +838,13 @@ async function boot() {
     rd.readAsDataURL(f);
   });
   $('#btnSettings').addEventListener('click', openSettings);
+  $('#btnWizard').addEventListener('click', wizStart);
+  $('#wizSend').addEventListener('click', wizAnswer);
+  $('#wizInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); wizAnswer(); }
+  });
+  $('#wizRestart').addEventListener('click', wizStart);
+  $('#wizDone').addEventListener('click', wizDone);
   $('#setCancel').addEventListener('click', () => { $('#setModal').hidden = true; });
   $('#setSave').addEventListener('click', saveSettings);
   $('#selProv').addEventListener('change', (e) => toggleCloud(e.target.value === 'openai'));

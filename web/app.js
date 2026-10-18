@@ -672,6 +672,13 @@ function renderCardPop() {
       renderCardPop();
       toast('删了');
     }));
+
+  const nb = $('#newCard');
+  if (nb) nb.addEventListener('click', () => {
+    $('#cardPop').hidden = true;
+    $('#newModal').hidden = false;
+    $('#ncName').focus();
+  });
 }
 
 async function switchCard(sessionId) {
@@ -816,11 +823,6 @@ async function boot() {
   $('#brand').addEventListener('click', () => {
     $('#cardPop').hidden = !$('#cardPop').hidden;
   });
-  $('#newCard').addEventListener('click', () => {
-    $('#cardPop').hidden = true;
-    $('#newModal').hidden = false;
-    $('#ncName').focus();
-  });
   $('#ncCancel').addEventListener('click', () => { $('#newModal').hidden = true; });
   $('#ncSave').addEventListener('click', createCard);
   $('#ncAvatar').addEventListener('change', (e) => {
@@ -924,4 +926,15 @@ async function restoreHistory() {
   $('#input').focus();
 }
 
-boot();
+boot().catch((e) => {
+  console.error('boot failed', e);
+  const el = document.createElement('div');
+  el.className = 'err-bar';
+  el.style.position = 'fixed';
+  el.style.top = '0';
+  el.style.left = '0';
+  el.style.right = '0';
+  el.style.zIndex = '50';
+  el.innerHTML = `<span>启动失败：${String(e && e.message).replace(/[<>]/g, '')}</span>`;
+  document.body.appendChild(el);
+});

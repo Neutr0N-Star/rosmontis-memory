@@ -39,6 +39,27 @@ function ensureDefaultCard() {
 let CARDS = ensureDefaultCard();
 let SESSION = localStorage.getItem(CUR_KEY) || CARDS[0].session;
 
+/* 适配层：头像行与建卡向导的片段按「app」命名空间写就。
+ * card = 当前角色（名字跟随切换），cards = 卡片存储。 */
+const app = {
+  card: { name: (CARDS[0] && CARDS[0].name) || '藏识' },
+  cards: {
+    add(card) {
+      const session = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      const full = { session, ...card };
+      CARDS.push(full);
+      saveCards(CARDS);
+      return full;
+    },
+    async save() {
+      saveCards(CARDS);
+    },
+    get(sessionId) {
+      return CARDS.find((x) => x.session === sessionId);
+    },
+  },
+};
+
 const state = { busy: false, closed: false, count: 0 };
 
 const esc = (s) =>
@@ -530,7 +551,7 @@ async function wizDone() {
   }
   wiz.active = false;
   renderCards();
-  await enterCard(card.session);
+  await switchCard(card.session);
   toast(`「${card.name}」建好了，TA 应该已经先开口了`);
 }
 
@@ -692,6 +713,7 @@ async function switchCard(sessionId) {
   }
   SESSION = sessionId;
   localStorage.setItem(CUR_KEY, sessionId);
+  app.card = app.cards.get(sessionId) || { name: '藏识' };
   $('#cardPop').hidden = true;
   renderCardPop();  // 里面已同步 brand 头像与名字
   state.count = 0;

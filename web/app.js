@@ -77,13 +77,7 @@ function addMsg(role, text, meta) {
   el.className = `msg ${role}`;
   if (role === 'sys') {
     el.textContent = text;
-  } else {
-    if (role === 'ai') {
-      const who = document.createElement('div');
-      who.className = 'who';
-      who.textContent = '她';
-      el.appendChild(who);
-    }
+  } else if (role === 'me') {
     const body = document.createElement('div');
     body.className = 'body';
     body.textContent = text;
@@ -94,6 +88,31 @@ function addMsg(role, text, meta) {
       c.textContent = meta;
       el.appendChild(c);
     }
+  } else {
+    // 她：头像 + 名字 + 内容。对面是一个人，不是一段竖线。
+    const row = document.createElement('div');
+    row.className = 'ai-row';
+
+    const av = cardAvatarEl(SESSION, 'avatar');
+
+    const col = document.createElement('div');
+    col.className = 'ai-col';
+    const who = document.createElement('div');
+    who.className = 'who';
+    who.textContent = (app.card && app.card.name) || '她';
+    const body = document.createElement('div');
+    body.className = 'body';
+    body.textContent = text;
+    col.appendChild(who);
+    col.appendChild(body);
+    if (meta) {
+      const c = document.createElement('div');
+      c.className = 'cost';
+      c.textContent = meta;
+      col.appendChild(c);
+    }
+    row.append(av, col);
+    el.appendChild(row);
   }
   $('#chat').appendChild(el);
   $('#chat').scrollTop = $('#chat').scrollHeight;
@@ -104,9 +123,17 @@ function addMsg(role, text, meta) {
 function addTyping() {
   const el = document.createElement('div');
   el.className = 'msg ai';
-  el.innerHTML = `<div class="who">她</div>
-    <div class="body typing"><i></i><i></i><i></i></div>
-    <div class="cost elapsed">0.0s</div>`;
+  const avEl = cardAvatarEl(SESSION, 'avatar');
+  const nm = (app.card && app.card.name) || '她';
+  el.innerHTML = `<div class="ai-row">
+    <div class="avslot"></div>
+    <div class="ai-col">
+      <div class="who">${esc(nm)}</div>
+      <div class="body typing"><i></i><i></i><i></i></div>
+      <div class="cost elapsed">0.0s</div>
+    </div>
+  </div>`;
+  el.querySelector('.avslot').replaceWith(avEl);
   $('#chat').appendChild(el);
   $('#chat').scrollTop = $('#chat').scrollHeight;
 
@@ -144,18 +171,21 @@ function clearEmpty() {
 }
 
 function showEmpty() {
+  const nm = (app.card && app.card.name) || '她';
   const el = document.createElement('div');
   el.id = 'empty';
   el.className = 'empty-state';
+  const avPre = cardAvatarEl(SESSION, 'avatar');
   el.innerHTML = `
-    <div class="dot"></div>
-    <p class="lead">她记得你们说过的话</p>
-    <p class="sub">聊两句，试试她能不能记住。</p>
+    <div class="avslot2"></div>
+    <p class="lead">和${esc(nm)}聊聊</p>
+    <p class="sub">她会记住你们说过的话。试一句：</p>
     <div class="chips">
       <button data-say="我今天有点累">我今天有点累</button>
       <button data-say="我在准备考试，压力挺大">我在准备考试</button>
       <button data-say="随便聊聊吧">随便聊聊</button>
     </div>`;
+  el.querySelector('.avslot2').replaceWith(avPre);
   $('#chat').appendChild(el);
   el.querySelectorAll('[data-say]').forEach((b) =>
     b.addEventListener('click', () => {
@@ -170,7 +200,7 @@ function showEmpty() {
 async function send(textOverride) {
   if (state.busy) return;
   if (state.closed) {
-    toast('已经打烊了，点「开门」再聊');
+    toast('今天结束了，点「继续聊」开始新的一天');
     return;
   }
   const input = $('#input');
@@ -327,12 +357,12 @@ async function sleep() {
   if (state.closed) {
     state.closed = false;
     document.body.classList.remove('closed');
-    $('#btnSleep').textContent = '打烊';
-    addMsg('sys', '—— 开门 ——');
+    $('#btnSleep').textContent = '下一天';
+    addMsg('sys', '—— 新的一天 ——');
     return;
   }
   if (state.count === 0) {
-    toast('还没聊呢，先聊两句');
+    toast('先聊两句，不然没东西可以结算');
     return;
   }
 
@@ -348,7 +378,7 @@ async function sleep() {
 
     const el = document.createElement('div');
     el.className = 'settle';
-    el.innerHTML = `<div class="settle-title">打烊了</div>
+    el.innerHTML = `<div class="settle-title">一天结束</div>
       <div class="settle-cells">${cells
         .map(([k, v]) => `<div><b>${v}</b><span>${k}</span></div>`)
         .join('')}</div>
@@ -358,7 +388,7 @@ async function sleep() {
 
     state.closed = true;
     document.body.classList.add('closed');
-    $('#btnSleep').textContent = '开门';
+    $('#btnSleep').textContent = '继续聊';
     $('#send').disabled = true;
   } catch (e) {
     addError(`打烊失败：${e.message}`, sleep);
@@ -385,6 +415,8 @@ async function onboard(session, name, desc, seed) {
     ph.remove();
     clearEmpty();
     addMsg('ai', r.reply);
+    state.count++;
+    updateMeta();
   } catch (e) {
     clearInterval(ph._timer);
     ph.remove();
@@ -460,9 +492,37 @@ async function saveSettings() {
 }
 
 /* ── 角色卡 ──────────────────────────────────────────── */
+function cardAvatarEl(session, cls) {
+  const c = CARDS.find((x) => x.session === session);
+  const el = document.createElement('div');
+  el.className = cls || 'avatar';
+  if (c && c.avatar) {
+    el.style.backgroundImage = `url(${c.avatar})`;
+    el.style.backgroundSize = 'cover';
+    el.style.backgroundPosition = 'center';
+  } else {
+    el.textContent = ((c && c.name) || '她').charAt(0);
+  }
+  return el;
+}
+
 function renderCardPop() {
   const cur = CARDS.find((c) => c.session === SESSION);
-  $('#cardName').textContent = (cur && cur.name) || '藏识';
+  const nm = (cur && cur.name) || '藏识';
+  $('#cardName').textContent = nm;
+  const bav = $('#brandAvatar');
+  if (bav) {
+    const c = CARDS.find((x) => x.session === SESSION);
+    if (c && c.avatar) {
+      bav.style.backgroundImage = `url(${c.avatar})`;
+      bav.style.backgroundSize = 'cover';
+      bav.style.backgroundPosition = 'center';
+      bav.textContent = '';
+    } else {
+      bav.style.backgroundImage = '';
+      bav.textContent = nm.charAt(0);
+    }
+  }
   $('#cardList').innerHTML = CARDS.map(
     (c) => `<button class="pop-item ${c.session === SESSION ? 'on' : ''}" data-card="${esc(c.session)}">
       <b>${esc(c.name)}</b>${c.desc ? `<span>${esc(c.desc)}</span>` : ''}</button>`
@@ -484,13 +544,11 @@ async function switchCard(sessionId) {
   SESSION = sessionId;
   localStorage.setItem(CUR_KEY, sessionId);
   $('#cardPop').hidden = true;
-  renderCardPop();
-
-  // 清空并重画这个角色的对话
+  renderCardPop();  // 里面已同步 brand 头像与名字
   state.count = 0;
   state.closed = false;
   document.body.classList.remove('closed');
-  $('#btnSleep').textContent = '打烊';
+  $('#btnSleep').textContent = '下一天';
   $('#send').disabled = false;
   $('#chat').innerHTML = '';
   closeDrawer();
@@ -512,6 +570,7 @@ async function createCard() {
   const seed = ($('#ncSeed').value || '').trim();
 
   const session = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const avatarData = window._pendingAvatar || '';
   try {
     // 种子写进人格：这是这个角色的记忆起点
     await api('/v1/persona', {
@@ -530,7 +589,8 @@ async function createCard() {
     toast(`种子没写进去：${e.message}`);
   }
 
-  CARDS.push({ session, name, desc });
+  CARDS.push({ session, name, desc, avatar: avatarData });
+  window._pendingAvatar = '';
   saveCards(CARDS);
   $('#newModal').hidden = true;
   $('#ncName').value = '';
@@ -587,10 +647,61 @@ async function boot() {
   });
   $('#ncCancel').addEventListener('click', () => { $('#newModal').hidden = true; });
   $('#ncSave').addEventListener('click', createCard);
+  $('#ncAvatar').addEventListener('change', (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      window._pendingAvatar = rd.result;
+      const pv = $('#ncAvatarPrev');
+      pv.style.backgroundImage = `url(${rd.result})`;
+      pv.style.backgroundSize = 'cover';
+      pv.style.backgroundPosition = 'center';
+      pv.textContent = '';
+    };
+    rd.readAsDataURL(f);
+  });
   $('#btnSettings').addEventListener('click', openSettings);
   $('#setCancel').addEventListener('click', () => { $('#setModal').hidden = true; });
   $('#setSave').addEventListener('click', saveSettings);
   $('#selProv').addEventListener('change', (e) => toggleCloud(e.target.value === 'openai'));
+
+  // 聊天背景：本地文件 → dataURL → localStorage
+  const BG_KEY = 'alaya.bg';
+  function applyBg() {
+    const bg = localStorage.getItem(BG_KEY);
+    if (bg) {
+      document.body.style.backgroundImage = `linear-gradient(rgba(17,18,20,.72),rgba(17,18,20,.72)),url(${bg})`;
+      document.body.classList.add('has-bg');
+      const p = $('#bgPrev');
+      if (p) { p.style.backgroundImage = `url(${bg})`; p.textContent = ''; }
+    } else {
+      document.body.style.backgroundImage = '';
+      document.body.classList.remove('has-bg');
+      const p = $('#bgPrev');
+      if (p) { p.style.backgroundImage = ''; p.textContent = '无'; }
+    }
+  }
+  $('#bgFile').addEventListener('change', (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      try {
+        localStorage.setItem(BG_KEY, rd.result);
+        applyBg();
+        toast('背景换好了');
+      } catch (err) {
+        toast('图太大，存不下。换张小点的');
+      }
+    };
+    rd.readAsDataURL(f);
+  });
+  $('#bgClear').addEventListener('click', () => {
+    localStorage.removeItem(BG_KEY);
+    applyBg();
+  });
+  applyBg();
   document.addEventListener('click', (e) => {
     if (!e.target.closest('#cardPop') && !e.target.closest('#brand')) $('#cardPop').hidden = true;
   });

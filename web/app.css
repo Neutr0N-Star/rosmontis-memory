@@ -353,3 +353,15 @@ body.has-bg{background-size:cover;background-position:center}
   font-size:10px;padding:3px 9px;border-radius:6px;color:var(--dimmer);min-height:0;
 }
 .pop-item .row-btns button:hover{color:var(--accent);border-color:var(--accent-dim)}
+
+/* 建卡向导模态 */
+.wiz-box{width:min(520px,100%);display:flex;flex-direction:column;max-height:86vh}
+.wiz-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.wiz-head h2{flex:1;margin-bottom:0}
+.wiz-chat{
+  flex:1;min-height:220px;max-height:46vh;overflow-y:auto;
+  display:flex;flex-direction:column;gap:12px;
+  background:#0f0d0a;border:1px solid var(--line);border-radius:10px;padding:14px;
+}
+.wiz-composer{padding:10px 0 6px}
+.wiz-note{margin:6px 0 0;text-align:center}

@@ -110,6 +110,26 @@
   </div>
 </div>
 
+<!-- 建卡向导：独立模态，不挂记忆管线 -->
+<div class="modal" id="wizModal" hidden>
+  <div class="modal-box wiz-box">
+    <div class="wiz-head">
+      <h2>建卡向导</h2>
+      <button id="wizClose" class="ghost">关</button>
+    </div>
+    <div class="chat wiz-chat" id="wizChat"></div>
+    <div class="composer wiz-composer">
+      <input id="wizInput" placeholder="在这里回答…" autocomplete="off">
+      <button id="wizSend" class="primary">答</button>
+    </div>
+    <div class="wiz-actions" id="wizActions" hidden>
+      <button id="wizRestart" class="ghost">重来</button>
+      <button id="wizDone" class="primary">确认创建</button>
+    </div>
+    <p class="wiz-note">向导只负责建卡，这里的对话不会进入任何角色的记忆。</p>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 <script src="/static/app.js"></script>
 </body>

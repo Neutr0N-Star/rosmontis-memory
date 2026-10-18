@@ -1,0 +1,9 @@
+node_modules/
+*.log
+.gamefy/dev.log
+.gamefy/check/
+__pycache__/
+*.pyc
+demo.db*
+alaya.db*
+.review/

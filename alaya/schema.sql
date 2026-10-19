@@ -1,5 +1,7 @@
--- 藏识 Alaya schema v2（特化版：面向长期陪伴 AI 的人格记忆）
+-- 藏识 Alaya schema v3（特化版：面向长期陪伴 AI 的人格记忆）
 -- 时间统一 epoch 秒（REAL）。物理删除只发生在 tombstone 明确记录之后。
+-- v3 只加列/加表（A2 §3.3）：episode 的 origin/state/state_at/gate_version、
+-- fact 的 origin/archived、item_state_log；旧列保留为兼容投影，不删不改。
 
 PRAGMA journal_mode = WAL;
 PRAGMA synchronous = NORMAL;
@@ -67,8 +69,16 @@ CREATE TABLE IF NOT EXISTS episode (
     correction_of  TEXT,                        -- 订正了哪条（本条目是新的说法）
     superseded_by  TEXT,                        -- 被哪条订正（本条目是旧的说法，仍保留）
     chunk_key      TEXT,                        -- 幂等键：sha1(sorted line ids)
-    meta_json      TEXT
+    meta_json      TEXT,
+    -- v3：生命周期真值（唯一）。tier/archived/muted 是它的兼容投影，由 pipeline 双写。
+    -- origin: ingest 被动 / tool 模型主动 / system 整流 / dream / summary
+    -- state:  inbox / note / resident / important / archived / muted / dream
+    origin         TEXT,
+    state          TEXT,
+    state_at       REAL,                        -- 最近一次状态转移时间
+    gate_version   TEXT                         -- 最近一次过闸的 gate 版本
 );
+CREATE INDEX IF NOT EXISTS idx_ep_state        ON episode(session_id, state, muted);
 CREATE INDEX IF NOT EXISTS idx_ep_session_time ON episode(session_id, t_event);
 CREATE INDEX IF NOT EXISTS idx_ep_tier         ON episode(session_id, tier, muted);
 CREATE INDEX IF NOT EXISTS idx_ep_cool         ON episode(cooldown_until);
@@ -122,7 +132,10 @@ CREATE TABLE IF NOT EXISTS fact (
     access_count      INTEGER NOT NULL DEFAULT 0,
     last_access       REAL,
     correction_of     TEXT,
-    superseded_by     TEXT
+    superseded_by     TEXT,
+    -- v3：来源与归档（事实永久、只换状态；C3 归档阈值更低，由 forget 执行）
+    origin            TEXT,
+    archived          INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_fact_sp     ON fact(session_id, subject_id, predicate, status);
 CREATE INDEX IF NOT EXISTS idx_fact_valid  ON fact(t_valid_from, t_valid_to);
@@ -203,3 +216,19 @@ CREATE TABLE IF NOT EXISTS retrieval_log (
     budget_total  INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_rlog_ts ON retrieval_log(ts);
+
+-- ── 生命周期审计（v3，唯一审计，吸收 notebook_promotion）────────
+-- 每次状态转移/promotion 留痕；迁移时存量每条补一条 backfill 记录。
+CREATE TABLE IF NOT EXISTS item_state_log (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id    TEXT NOT NULL,
+    from_state TEXT,
+    to_state   TEXT NOT NULL,
+    action     TEXT NOT NULL,
+    target     TEXT,
+    reason     TEXT,
+    gate_json  TEXT,
+    at         REAL NOT NULL,
+    actor      TEXT NOT NULL DEFAULT 'system'
+);
+CREATE INDEX IF NOT EXISTS idx_log_item ON item_state_log(item_id, at);

@@ -15,6 +15,8 @@ from ..config import Config
 from . import db as DB
 from . import extract as EX
 from . import ids as IDS
+from . import item as IT
+from . import pipeline as TR
 from . import promotion as PR
 from . import score as SC
 from . import text as TX
@@ -68,6 +70,10 @@ def ingest(
     auto_forget: bool | None = None,
     skip_extract: bool = False,
 ) -> IngestResult:
+    """同步写入：抽取 → `pipeline.submit()` 落 item → 结构投影。
+
+    episode 的 INSERT 已收口到 pipeline；这里只负责抽取与投影（与异步 enrich 同一实现）。
+    """
     now = now or time.time()
     t_event = t_event or now
     text = (text or "").strip()
@@ -76,13 +82,11 @@ def ingest(
 
     ep_id = IDS.episode_id(session_id, role, text, t_event)
 
-    # ── 幂等检查 ──
+    # ── 幂等预检（避免白跑一次 LLM；真正的幂等在 pipeline.submit 事务内）──
     with DB.reader(cfg.db_path) as conn:
         row = conn.execute("SELECT id FROM episode WHERE id=?", (ep_id,)).fetchone()
         if row:
             return IngestResult(episode_id=ep_id, duplicate=True, note="已存在，跳过")
-
-        # seq 不在这里算——并发时会读到同一个值。真正取号在事务里。
 
     # ── 抽取（事务外，因为要调 LLM，避免长事务锁库）──
     if skip_extract:
@@ -90,87 +94,137 @@ def ingest(
     else:
         ext = EX.extract(text, llm, now, role=role, use_llm=cfg.use_llm_extract)
 
-    # 降级时不要把哈希伪向量写进库。它不是语义向量，写进去之后
-    # 服务恢复了这些行也永远检索不准，而 `degraded` 标记早就翻回 false 了。
-    # 宁可这一轮没有向量（靠全文和图兜底），也不要留一条永久的坏向量。
+    # 降级时不要把哈希伪向量写进库（I4：两入口都不写伪向量）
     vec = embedder.embed(text)
     emb = None if embedder.degraded else V.pack(vec)
-    emo = SC.emotion_intensity(text, is_session_tail=False)
-    salience = _salience(text, emo, ext, role)
+    emo = emotion_of(text)
+    mtype = PR.classify_type(text, PR.S_DIALOGUE)
+    author = "teacher" if role == "user" else ("self" if role == "assistant" else "system")
+    actor = {
+        "user": IT.ACTOR_USER,
+        "assistant": IT.ACTOR_MODEL,
+        "system": IT.ACTOR_SYSTEM,
+    }.get(role, IT.ACTOR_SYSTEM)
+    salience = salience_of(
+        text,
+        emo,
+        actor=actor,
+        memory_type=mtype,
+        has_state=bool(ext.state_changes),
+        has_facts=bool(ext.facts),
+        has_entities=bool(ext.entities),
+        fact_predicates=[f.predicate for f in ext.facts],
+    )
 
-    # 特化维度：作者、来源、类型、层级
-    author = PR.A_TEACHER if role == "user" else (PR.A_SELF if role == "assistant" else PR.A_SYSTEM)
-    source = PR.S_DIALOGUE
-    mtype = PR.classify_type(text, source)
-    tier = PR.default_tier(source, mtype, author)
-    okc, why = PR.validate_combo(tier, mtype)
-    if not okc:
-        tier = PR.TIER_RETRIEVAL
-        ext.note = (ext.note or "") + f"|{why}"
+    item = IT.MemoryItem(
+        id=ep_id,
+        session_id=session_id,
+        text=text,
+        origin=IT.ORIGIN_INGEST,
+        actor=actor,
+        memory_type=mtype,
+        salience=salience,
+        emotion=emo,
+        t_event=t_event,
+        t_ingest=now,
+        role=role,
+        source="dialogue",
+        author=author,
+        embedding=emb,
+        meta={"extract_source": ext.source} if ext.source not in ("rule", "") else {},
+    )
+    sub = TR.submit(item, project=False, cfg=cfg, embedder=embedder, llm=llm)
+    if sub.duplicate:
+        return IngestResult(episode_id=sub.item_id, duplicate=True, note="已存在，跳过")
+    if not sub.ok:
+        return IngestResult(episode_id="", note=sub.reason or "写入失败")
 
-    result = IngestResult(episode_id=ep_id, salience=salience, source=ext.source, note=ext.note)
+    result = IngestResult(episode_id=sub.item_id, salience=sub.salience, source=ext.source, note=ext.note)
 
-    with DB.tx(cfg.db_path) as conn:
-        ensure_session(cfg, conn, session_id, now=now)
-
-        # 取号必须在事务内：并发写入时多个请求会读到同一个 MAX，
-        # 结果 seq 全是 1。这一步之前放在 reader 里，是错的。
-        seq_row = conn.execute(
-            "SELECT COALESCE(MAX(seq), 0) AS m FROM episode WHERE session_id=?", (session_id,)
-        ).fetchone()
-        seq = int(seq_row["m"] or 0) + 1
-
-        conn.execute(
-            """INSERT INTO episode
-               (id,session_id,seq,role,text,t_event,t_ingest,source,tier,memory_type,author,
-                salience,emotion,embedding)
-               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (
-                ep_id, session_id, seq, role, text, t_event, now,
-                source, tier, mtype, author, salience, emo, emb,
-            ),
-        )
-        conn.execute(
-            "INSERT INTO episode_fts(episode_id,tokens) VALUES(?,?)",
-            (ep_id, " ".join(TX.tokenize(text))),
-        )
-
-        ent_cache: dict[str, str] = {}
-        for e in ext.entities:
-            eid, created = _upsert_entity(conn, session_id, e.name, e.type, t_event, now)
-            ent_cache[IDS.normalize(e.name)] = eid
-            if created:
-                result.entities_new += 1
-
-        for f in ext.facts:
-            act = _resolve_fact(cfg, conn, session_id, f, ep_id, ent_cache, t_event, now, embedder)
-            result.details.append(act)
-            kind = act.get("action")
-            if kind == "ADD":
-                result.added += 1
-            elif kind == "UPDATE":
-                result.updated += 1
-            elif kind == "INVALIDATE":
-                result.invalidated += 1
-            else:
-                result.noop += 1
-
-        for s in ext.state_changes:
-            if _apply_state(conn, session_id, s, ent_cache, t_event, now):
-                result.states_changed += 1
-
-        touched = _group_theme(cfg, conn, session_id, ext, ep_id, ent_cache, t_event, now)
-        result.edges_touched = touched
-
-        conn.execute(
-            "UPDATE session SET last_active=? WHERE id=?", (now, session_id)
-        )
+    if not ext.empty():
+        with DB.tx(cfg.db_path) as conn:
+            counts = _project_extraction(
+                cfg, conn, session_id, ext, sub.item_id, t_event, now, embedder
+            )
+            conn.execute("UPDATE session SET last_active=? WHERE id=?", (now, session_id))
+        result.entities_new = counts["entities_new"]
+        result.added = counts["added"]
+        result.updated = counts["updated"]
+        result.invalidated = counts["invalidated"]
+        result.noop = counts["noop"]
+        result.states_changed = counts["states_changed"]
+        result.edges_touched = counts["edges_touched"]
+        result.details = counts["details"]
 
     if auto_forget if auto_forget is not None else cfg.auto_forget:
         if result.added + result.updated > 0:
             _maybe_forget(cfg, session_id, now)
 
     return result
+
+
+def _project_extraction(
+    cfg: Config,
+    conn,
+    session_id: str,
+    ext: EX.Extraction,
+    ep_id: str,
+    t_event: float,
+    now: float,
+    embedder=None,
+) -> dict:
+    """结构投影的唯一实现：被动同步写入与主动异步 enrich 共用。"""
+    out = {
+        "entities_new": 0,
+        "added": 0,
+        "updated": 0,
+        "invalidated": 0,
+        "noop": 0,
+        "states_changed": 0,
+        "edges_touched": 0,
+        "details": [],
+    }
+    ent_cache: dict[str, str] = {}
+    for e in ext.entities:
+        eid, created = _upsert_entity(conn, session_id, e.name, e.type, t_event, now)
+        ent_cache[IDS.normalize(e.name)] = eid
+        if created:
+            out["entities_new"] += 1
+
+    for f in ext.facts:
+        act = _resolve_fact(cfg, conn, session_id, f, ep_id, ent_cache, t_event, now, embedder)
+        out["details"].append(act)
+        kind = act.get("action")
+        if kind == "ADD":
+            out["added"] += 1
+        elif kind == "UPDATE":
+            out["updated"] += 1
+        elif kind == "INVALIDATE":
+            out["invalidated"] += 1
+        else:
+            out["noop"] += 1
+
+    for s in ext.state_changes:
+        if _apply_state(conn, session_id, s, ent_cache, t_event, now):
+            out["states_changed"] += 1
+
+    out["edges_touched"] = _group_theme(cfg, conn, session_id, ext, ep_id, ent_cache, t_event, now)
+    return out
+
+
+def _merge_meta(conn, item_id: str, patch: dict) -> None:
+    """合并 meta_json，而不是覆盖——主动条目的四段 segments 不能被 enrich 抹掉。"""
+    row = conn.execute("SELECT meta_json FROM episode WHERE id=?", (item_id,)).fetchone()
+    meta: dict = {}
+    if row is not None and row["meta_json"]:
+        try:
+            loaded = json.loads(row["meta_json"])
+            if isinstance(loaded, dict):
+                meta = loaded
+        except (TypeError, ValueError):
+            meta = {}
+    meta.update(patch)
+    conn.execute("UPDATE episode SET meta_json=? WHERE id=?", (json.dumps(meta, ensure_ascii=False), item_id))
 
 
 # ── 实体 ──────────────────────────────────────────────────────
@@ -457,20 +511,50 @@ def _label_from_entities(conn, ent_ids: list[str]) -> str:
     return "·".join(names)
 
 
-# ── 重要度 ────────────────────────────────────────────────────
-def _salience(text: str, emo: float, ext: EX.Extraction, role: str) -> float:
+# ── 重要度与情感：全系统唯一的实现（M3 打分单点）────────────
+# 状态类谓词：出现时说明这次写入改变了世界状态，重要度抬高
+_STATE_PREDICATES = ("工作在", "住在", "关系是")
+
+
+def emotion_of(text: str) -> float:
+    """情绪强度的唯一实现。被动/主动/系统条目都走它。"""
+    return SC.emotion_intensity(text or "", is_session_tail=False)
+
+
+def salience_of(
+    text: str,
+    emotion: float = 0.0,
+    *,
+    actor: str = "system",
+    memory_type: str = "fact",
+    has_state: bool = False,
+    has_facts: bool = False,
+    has_entities: bool = False,
+    fact_predicates: list[str] | tuple[str, ...] = (),
+    segments: dict | None = None,
+) -> float:
+    """重要度的唯一实现（原 `write._salience` + `notebook` 内联公式合并）。
+
+    口径只看内容证据，**不看 origin**——同内容经主动/被动两个入口写入必须同分（M3）。
+    - 用户/主人说的话略高
+    - 情绪、长文本、状态变更、位置/工作/关系事实各自加权
+    - 抽取不出任何结构的段落降权
+    - 主动条目的第二层（noticed/means/next）等价于结构化证据，逐段小幅加权
+    """
     base = 0.42
-    if role == "user":
+    if (actor or "").strip().lower() in ("user", "teacher"):
         base += 0.06
-    base += emo * 0.30
-    if len(text) > 80:
+    base += float(emotion or 0.0) * 0.30
+    if len(text or "") > 80:
         base += 0.04
-    if ext.state_changes:
+    if has_state:
         base += 0.10
-    if any(f.predicate in ("工作在", "住在", "关系是") for f in ext.facts):
+    if any(p in _STATE_PREDICATES for p in (fact_predicates or ())):
         base += 0.08
-    if not ext.facts and not ext.entities:
+    if not has_facts and not has_entities:
         base -= 0.10
+    if segments:
+        base += 0.04 * sum(1 for k in ("noticed", "means", "next") if (segments.get(k) or "").strip())
     return float(max(0.05, min(1.0, base)))
 
 
@@ -483,19 +567,38 @@ def _maybe_forget(cfg: Config, session_id: str, now: float) -> None:
         log.debug("inline decay failed: %s", e)
 
 
-# ── 后置抽取：给已经入库的 episode 补事实（异步路径用）────────
+# ── 后置抽取：给已经入库的 episode 补结构投影（异步路径用）────
 def enrich(cfg: Config, llm: LLM | None, episode_id: str, now: float | None = None, embedder=None) -> dict:
-    """对已存在的 episode 做抽取并写入事实层。
+    """对已存在的 episode 做抽取并写入结构层。
 
     异步写入用：原文先落库保证不丢，抽取在后台跑，跑完再补。
+    与被动同步写入共用 `_project_extraction`，口径唯一（M2）。
     """
     now = now or time.time()
     with DB.reader(cfg.db_path) as conn:
         r = conn.execute("SELECT * FROM episode WHERE id=?", (episode_id,)).fetchone()
     if r is None:
         return {"ok": False, "reason": "episode 不存在"}
-    if r["muted"] or r["archived"]:
+
+    state = r["state"] if "state" in r.keys() and r["state"] else IT.compat_state(
+        r["tier"], r["archived"], r["muted"]
+    )
+    if state in (IT.STATE_MUTED, IT.STATE_ARCHIVED) or r["muted"] or r["archived"]:
         return {"ok": False, "reason": "条目已删除或归档，不再抽取"}
+
+    import json as _json
+
+    meta: dict = {}
+    if r["meta_json"]:
+        try:
+            loaded = _json.loads(r["meta_json"])
+            if isinstance(loaded, dict):
+                meta = loaded
+        except (TypeError, ValueError):
+            meta = {}
+    if meta.get("enriched"):
+        return {"ok": True, "skipped": "已抽取过"}
+
     with DB.reader(cfg.db_path) as conn:
         dead = conn.execute(
             "SELECT 1 FROM tombstone WHERE chunk_key=? OR line_ids LIKE ?",
@@ -503,13 +606,20 @@ def enrich(cfg: Config, llm: LLM | None, episode_id: str, now: float | None = No
         ).fetchone()
     if dead:
         return {"ok": False, "reason": "条目已进墓碑，不再抽取"}
-    if r["meta_json"] and '"enriched": true' in r["meta_json"]:
-        return {"ok": True, "skipped": "已抽取过"}
 
     ext = EX.extract(r["text"], llm, now, role=r["role"], use_llm=cfg.use_llm_extract)
-    res = {"ok": True, "added": 0, "updated": 0, "invalidated": 0, "states_changed": 0, "source": ext.source}
+    res = {
+        "ok": True,
+        "added": 0,
+        "updated": 0,
+        "invalidated": 0,
+        "noop": 0,
+        "states_changed": 0,
+        "edges_touched": 0,
+        "source": ext.source,
+    }
 
-    # 用抽取结果修正 episode 的类型与层级
+    # 用抽取结果修正 episode 的类型（不改状态，状态只由 gate/pipeline 改）
     mtype = ext.facts[0].memory_type if ext.facts else PR.classify_type(r["text"], r["source"])
     if mtype and mtype != r["memory_type"]:
         with DB.tx(cfg.db_path) as conn:
@@ -517,36 +627,18 @@ def enrich(cfg: Config, llm: LLM | None, episode_id: str, now: float | None = No
 
     if ext.empty():
         with DB.tx(cfg.db_path) as conn:
-            conn.execute(
-                "UPDATE episode SET meta_json=? WHERE id=?",
-                ('{"enriched": true, "empty": true}', episode_id),
-            )
+            _merge_meta(conn, episode_id, {"enriched": True, "empty": True})
         return res
 
     with DB.tx(cfg.db_path) as conn:
-        ent_cache: dict[str, str] = {}
-        for e in ext.entities:
-            eid, _ = _upsert_entity(conn, r["session_id"], e.name, e.type, r["t_event"], now)
-            ent_cache[IDS.normalize(e.name)] = eid
-
-        for f in ext.facts:
-            act = _resolve_fact(cfg, conn, r["session_id"], f, episode_id, ent_cache, r["t_event"], now, embedder)
-            k = act.get("action")
-            if k == "ADD":
-                res["added"] += 1
-            elif k == "UPDATE":
-                res["updated"] += 1
-            elif k == "INVALIDATE":
-                res["invalidated"] += 1
-
-        for s in ext.state_changes:
-            if _apply_state(conn, r["session_id"], s, ent_cache, r["t_event"], now):
-                res["states_changed"] += 1
-
-        _group_theme(cfg, conn, r["session_id"], ext, episode_id, ent_cache, r["t_event"], now)
-
-        conn.execute(
-            "UPDATE episode SET meta_json=? WHERE id=?",
-            ('{"enriched": true}', episode_id),
+        counts = _project_extraction(
+            cfg, conn, r["session_id"], ext, episode_id, r["t_event"], now, embedder
         )
+        res["added"] = counts["added"]
+        res["updated"] = counts["updated"]
+        res["invalidated"] = counts["invalidated"]
+        res["noop"] = counts["noop"]
+        res["states_changed"] = counts["states_changed"]
+        res["edges_touched"] = counts["edges_touched"]
+        _merge_meta(conn, episode_id, {"enriched": True})
     return res

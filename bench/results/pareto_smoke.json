@@ -1,0 +1,5464 @@
+{
+  "ok": true,
+  "dataset": {
+    "name": "alaya-bench-synthetic-v1",
+    "seed": 20261019,
+    "dialogues": 200,
+    "turns": 400,
+    "sessions": 5,
+    "questions": 135,
+    "questions_by_category": {
+      "abstain": 30,
+      "multi_hop": 25,
+      "preference": 30,
+      "temporal": 30,
+      "update": 20
+    },
+    "fingerprint": {
+      "verified": true,
+      "files": {
+        "conversations.jsonl": {
+          "expected": "5b3db0dcaabfee4972bf8e1e3ede5bd0ff312ee8a8e37a0b7fc23af2e6727729",
+          "actual": "5b3db0dcaabfee4972bf8e1e3ede5bd0ff312ee8a8e37a0b7fc23af2e6727729",
+          "match": true
+        },
+        "questions.jsonl": {
+          "expected": "0cd6a6d298fd53008557ec35b4dac4d6b913372378a4d06e7ffe5b58b4a49ec7",
+          "actual": "0cd6a6d298fd53008557ec35b4dac4d6b913372378a4d06e7ffe5b58b4a49ec7",
+          "match": true
+        },
+        "sessions.json": {
+          "expected": "c7e46e5b80d7af6fd12da41da1b00a7c6eb4cd83ac646ef202ec5229be4a7e82",
+          "actual": "c7e46e5b80d7af6fd12da41da1b00a7c6eb4cd83ac646ef202ec5229be4a7e82",
+          "match": true
+        }
+      },
+      "manifest": {
+        "assistant_turns": 200,
+        "base_ts": 1767574800.0,
+        "commands": {
+          "eval": "PYTHONIOENCODING=utf-8 python bench/run_eval.py",
+          "generate": "PYTHONIOENCODING=utf-8 python bench/dataset/gen_dataset.py",
+          "pareto": "PYTHONIOENCODING=utf-8 python bench/pareto.py"
+        },
+        "dialogues": 200,
+        "files": {
+          "conversations.jsonl": "5b3db0dcaabfee4972bf8e1e3ede5bd0ff312ee8a8e37a0b7fc23af2e6727729",
+          "questions.jsonl": "0cd6a6d298fd53008557ec35b4dac4d6b913372378a4d06e7ffe5b58b4a49ec7",
+          "sessions.json": "c7e46e5b80d7af6fd12da41da1b00a7c6eb4cd83ac646ef202ec5229be4a7e82"
+        },
+        "generator": "bench/dataset/gen_dataset.py",
+        "horizon_days": 180,
+        "labels": "程序化金标：生成时由模板同步写出，非人工标注；抽取/检索判定口径见 bench/report.md",
+        "name": "alaya-bench-synthetic-v1",
+        "now_ts": 1783213200.0,
+        "questions": 135,
+        "questions_by_category": {
+          "abstain": 30,
+          "multi_hop": 25,
+          "preference": 30,
+          "temporal": 30,
+          "update": 20
+        },
+        "seed": 20261019,
+        "sessions": 5,
+        "turns": 400,
+        "user_turns": 200,
+        "version": 1
+      }
+    }
+  },
+  "meta": {
+    "run_at": "2026-10-19T14:23:10+08:00",
+    "field": "on",
+    "repeats": 1,
+    "build_elapsed_s": 0.31,
+    "environment": {
+      "python": "3.12.10",
+      "platform": "win32",
+      "numpy": "2.2.6",
+      "jieba": false,
+      "alaya_version": "1.0.0",
+      "embed_default": "hash（无 Ollama 时哈希伪向量，核心不落库向量 → 稠密路退化）",
+      "PYTHONIOENCODING": "utf-8",
+      "ALAYA_FIELD": ""
+    },
+    "code": {
+      "git_head": "42c7c483acebae1396ee1e117aa29ae413adccf0",
+      "dirty_core_files": [
+        "alaya/__init__.py",
+        "alaya/core/db.py",
+        "alaya/core/forget.py",
+        "alaya/core/memory.py",
+        "alaya/core/memory_field.py",
+        "alaya/core/notebook.py",
+        "alaya/core/recall.py",
+        "alaya/core/score.py",
+        "alaya/core/write.py",
+        "alaya/harness.py",
+        "alaya/schema.sql",
+        "alaya/service/app.py",
+        "alaya/tools.py",
+        "alaya/api.py",
+        "alaya/core/field.py",
+        "alaya/core/gate.py",
+        "alaya/core/item.py",
+        "alaya/core/pipeline.py"
+      ],
+      "git_ok": true,
+      "core_files": {
+        "alaya/__init__.py": "03a1d9a4530ad3e67a02c7031405f68e808e2d1696c0209b347acf63792e40bd",
+        "alaya/api.py": "f0efa69aaca4b5d2effd7ad4d15007ad8af62126c9decbaa4c30203dcb846e5c",
+        "alaya/cli.py": "f1995658863794068b386b9ecc03db8ad18f82a672ed7fdfddcb1276f4aff926",
+        "alaya/config.py": "75f31b2284fed0271205acd8ff0c80f4df35becc2a1c847dec43815a05dce6e0",
+        "alaya/core/__init__.py": "96eaf4fc2b2cd04a05f3bd961172fee30401eb8983c5d04598efb6d501e5139c",
+        "alaya/core/audit.py": "84faebda09b94f49534bfde437b47859d6e03b4dd334883f20b0d3714aca9aa7",
+        "alaya/core/context.py": "feb1733f16d25daad427273ee8fc56ef0b2696edbc5e18d956e04615949a9ec5",
+        "alaya/core/db.py": "1b37011a43d910d0752e813eadcfafafacf8f9b0001d5127ce41cc1d2d3a540e",
+        "alaya/core/dream.py": "3719cee2a16746a7dc503c1d0c4c3934e903cd740de5604ad8b107905c1ae728",
+        "alaya/core/embed.py": "b814847ba32cfe46ba287339a70c59a652720b4c1de7c5e022a768d5748d8a71",
+        "alaya/core/extract.py": "943c57d3af0fe32a92ee74c5cfe93f810790915d8748312cd78000f8f983d999",
+        "alaya/core/field.py": "5ca8e40642b7a78c5257fe0eaef94f443f94337d15fe9d1aa80fb77b2f43e15e",
+        "alaya/core/forget.py": "234b1a323a8247045564484d8a12a681a674ffcb8a139cc010bfd57baad58c1f",
+        "alaya/core/gate.py": "c0fd4cf952c24643934a503edc32c5037be0a9cf418e1bf4127da7d3873b00a6",
+        "alaya/core/ids.py": "8235cf3e1c716990abe656bc003ea458620c137ac9432dc1d0180fb0ac5e223d",
+        "alaya/core/item.py": "06387474b398fcf291fe3af2a1bbda644f5006259c08d02c158b25b1e44c1d22",
+        "alaya/core/llm.py": "ac7962086c46eb43248c852675d64e65a1af71c234594c4aabe403a164519a19",
+        "alaya/core/memory.py": "df1d0359c4cc50a9b377cff0bd5187a65a96564cc6a54cbf30ddbbe3e08bd747",
+        "alaya/core/memory_field.py": "bcbbedfd4457ccdaa8c4a3b3f280709835fad33f8f26fe81cd28eca5590f2a7e",
+        "alaya/core/notebook.py": "d613097bb0691219f1331eec8effe8a070cc0251891bda54b765de1cd30897cc",
+        "alaya/core/pages.py": "a3a8c77b57832f8c5cb7c70ecfe4327a4d98cca1509dd1d73f7e451aa379a1a6",
+        "alaya/core/persona.py": "ef147ad06289ce307767671a2092e3b3efbb42824ad3205a3bfe2ba4fec56a42",
+        "alaya/core/pipeline.py": "b6f7bc379dfdcad53b868f85d0b4975cfc206f43171324e2015aac6a16043d01",
+        "alaya/core/promotion.py": "2ddf6049c264750505b0bc9238c79fe3dbaa66f5b8131bfac9462584f62698a0",
+        "alaya/core/recall.py": "f92ab9bb1e9ed5fa446e041c281e8aec42245f5dc5520ebcfafcf5df3193b641",
+        "alaya/core/score.py": "3c6fe2ef99ff87d3876a7187214193b72df7f66070c9ca8ad3e590e9e104b38e",
+        "alaya/core/text.py": "5597b38a06ca8ca38b3c2e3412c26ff19ae1995680072648170c30c591199600",
+        "alaya/core/timeparse.py": "333852259669e12ed892817cf1440cb20d1a0e73d526eff42236c95e227901d4",
+        "alaya/core/vec.py": "0fd2a684abba43aaf19c12ac5a47ea08f01bbc92b841c1270f1757a5d77abd17",
+        "alaya/core/write.py": "949448f37b53c8822e8957e01647249e13572385f39db3661240d01096020168",
+        "alaya/demo_runner.py": "e2e73f2064890cc7bcdacb5b8a873921da3b30de720cc02f3a36f585543875ac",
+        "alaya/harness.py": "c2aec34d09066437925358dba9cacac966360529a214d9ed95e9736cf898e787",
+        "alaya/service/__init__.py": "c63146d3e8781d83e5e716098faf34cf17f35afbb33a6224c7dcd533979891dc",
+        "alaya/service/app.py": "9059085ee9e4ed38ecc371a8373f4d8239d66c9924d1695d97186f6516982538",
+        "alaya/tools.py": "d4c85a9a9ca80b33deebeabbcaf831a2371ec2642c40b576f13f573145bfb462"
+      }
+    },
+    "field_backend": {
+      "module": "alaya.core.field",
+      "native_switch": true,
+      "has_propagate": true,
+      "has_seed_nodes": true,
+      "recall_uses_field": true,
+      "iterations_source": "REFLEX_DEPTH[*].hops",
+      "decay_source": "memory_field.DEFAULT_GAMMA",
+      "note": "场代码已落地时 ALAYA_FIELD 由核心 field.enabled 原生支持；未落地时本脚本退化为关掉图扩散"
+    },
+    "db_build": {
+      "dialogues": 200,
+      "turns": 400,
+      "added": 100,
+      "updated": 20,
+      "invalidated": 5,
+      "noop": 0,
+      "states_changed": 20,
+      "entities_new": 114,
+      "errors": 0,
+      "time_travel": true,
+      "elapsed_s": 0.307,
+      "db_stats": {
+        "episode": 400,
+        "fact_all": 125,
+        "fact_active": 100,
+        "entity": 119,
+        "state_open": 30,
+        "hyperedge": 50,
+        "hyperedge_member": 214
+      },
+      "embed_health": {
+        "provider": "hash",
+        "model": "bge-m3:latest",
+        "dim": 1024,
+        "reachable": false,
+        "degraded": true,
+        "degraded_reason": "embedding 服务不可用，已退化为确定性哈希向量",
+        "detail": ""
+      }
+    },
+    "configs": [
+      {
+        "name": "baseline_uniform",
+        "field": "on",
+        "gamma": 0.45,
+        "hops": 2,
+        "dense_k": 30,
+        "sparse_k": 30,
+        "graph_k": 18,
+        "budget": 1400,
+        "uniform_depth": true,
+        "theta_abstain": null,
+        "note": "统一档基线：场开、D=0.45、2 轮扩散、30/30/18、预算 1400"
+      },
+      {
+        "name": "field_off",
+        "field": "off",
+        "gamma": 0.45,
+        "hops": 2,
+        "dense_k": 30,
+        "sparse_k": 30,
+        "graph_k": 18,
+        "budget": 1400,
+        "uniform_depth": true,
+        "theta_abstain": null,
+        "note": "关语义场（ALAYA_FIELD=0），其余同基线"
+      },
+      {
+        "name": "D_low",
+        "field": "on",
+        "gamma": 0.25,
+        "hops": 2,
+        "dense_k": 30,
+        "sparse_k": 30,
+        "graph_k": 18,
+        "budget": 1400,
+        "uniform_depth": true,
+        "theta_abstain": null,
+        "note": "扩散强度 D=0.25"
+      },
+      {
+        "name": "D_high",
+        "field": "on",
+        "gamma": 0.7,
+        "hops": 2,
+        "dense_k": 30,
+        "sparse_k": 30,
+        "graph_k": 18,
+        "budget": 1400,
+        "uniform_depth": true,
+        "theta_abstain": null,
+        "note": "扩散强度 D=0.70"
+      },
+      {
+        "name": "hops_1",
+        "field": "on",
+        "gamma": 0.45,
+        "hops": 1,
+        "dense_k": 30,
+        "sparse_k": 30,
+        "graph_k": 18,
+        "budget": 1400,
+        "uniform_depth": true,
+        "theta_abstain": null,
+        "note": "扩散迭代 1 轮"
+      },
+      {
+        "name": "hops_3",
+        "field": "on",
+        "gamma": 0.45,
+        "hops": 3,
+        "dense_k": 30,
+        "sparse_k": 30,
+        "graph_k": 18,
+        "budget": 1400,
+        "uniform_depth": true,
+        "theta_abstain": null,
+        "note": "扩散迭代 3 轮"
+      },
+      {
+        "name": "depth_shallow",
+        "field": "on",
+        "gamma": 0.45,
+        "hops": 2,
+        "dense_k": 12,
+        "sparse_k": 12,
+        "graph_k": 8,
+        "budget": 1400,
+        "uniform_depth": true,
+        "theta_abstain": null,
+        "note": "检索深度 12/12/8"
+      },
+      {
+        "name": "depth_deep",
+        "field": "on",
+        "gamma": 0.45,
+        "hops": 2,
+        "dense_k": 60,
+        "sparse_k": 60,
+        "graph_k": 40,
+        "budget": 1400,
+        "uniform_depth": true,
+        "theta_abstain": null,
+        "note": "检索深度 60/60/40"
+      },
+      {
+        "name": "budget_low",
+        "field": "on",
+        "gamma": 0.45,
+        "hops": 2,
+        "dense_k": 30,
+        "sparse_k": 30,
+        "graph_k": 18,
+        "budget": 240,
+        "uniform_depth": true,
+        "theta_abstain": null,
+        "note": "注入预算 240 token"
+      },
+      {
+        "name": "budget_high",
+        "field": "on",
+        "gamma": 0.45,
+        "hops": 2,
+        "dense_k": 30,
+        "sparse_k": 30,
+        "graph_k": 18,
+        "budget": 2000,
+        "uniform_depth": true,
+        "theta_abstain": null,
+        "note": "注入预算 2000 token"
+      },
+      {
+        "name": "product_default",
+        "field": "on",
+        "gamma": null,
+        "hops": null,
+        "dense_k": null,
+        "sparse_k": null,
+        "graph_k": null,
+        "budget": 1400,
+        "uniform_depth": false,
+        "theta_abstain": null,
+        "note": "产品默认：按问题自适应反射深度 + 预算倍率，不注入任何参数"
+      },
+      {
+        "name": "theta_030",
+        "field": "on",
+        "gamma": 0.45,
+        "hops": 2,
+        "dense_k": 30,
+        "sparse_k": 30,
+        "graph_k": 18,
+        "budget": 1400,
+        "uniform_depth": true,
+        "theta_abstain": 0.3,
+        "note": "拒答阈值 θ_abstain=0.3（其余同统一档基线）"
+      },
+      {
+        "name": "theta_042",
+        "field": "on",
+        "gamma": 0.45,
+        "hops": 2,
+        "dense_k": 30,
+        "sparse_k": 30,
+        "graph_k": 18,
+        "budget": 1400,
+        "uniform_depth": true,
+        "theta_abstain": 0.42,
+        "note": "拒答阈值 θ_abstain=0.42（其余同统一档基线）"
+      },
+      {
+        "name": "theta_050",
+        "field": "on",
+        "gamma": 0.45,
+        "hops": 2,
+        "dense_k": 30,
+        "sparse_k": 30,
+        "graph_k": 18,
+        "budget": 1400,
+        "uniform_depth": true,
+        "theta_abstain": 0.5,
+        "note": "拒答阈值 θ_abstain=0.5（其余同统一档基线）"
+      },
+      {
+        "name": "theta_054",
+        "field": "on",
+        "gamma": 0.45,
+        "hops": 2,
+        "dense_k": 30,
+        "sparse_k": 30,
+        "graph_k": 18,
+        "budget": 1400,
+        "uniform_depth": true,
+        "theta_abstain": 0.54,
+        "note": "拒答阈值 θ_abstain=0.54（其余同统一档基线）"
+      },
+      {
+        "name": "theta_058",
+        "field": "on",
+        "gamma": 0.45,
+        "hops": 2,
+        "dense_k": 30,
+        "sparse_k": 30,
+        "graph_k": 18,
+        "budget": 1400,
+        "uniform_depth": true,
+        "theta_abstain": 0.58,
+        "note": "拒答阈值 θ_abstain=0.58（其余同统一档基线）"
+      }
+    ]
+  },
+  "extraction": {
+    "active": {
+      "backend": "scripted",
+      "dialogues": 200,
+      "failed_turns": 0,
+      "entity": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "matched": 120,
+        "predicted": 120,
+        "gold": 120
+      },
+      "fact": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "matched": 125,
+        "predicted": 125,
+        "gold": 125
+      },
+      "state_slot": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "matched": 35,
+        "predicted": 35,
+        "gold": 35
+      }
+    },
+    "offline_rule": {
+      "backend": "rule",
+      "dialogues": 200,
+      "failed_turns": 0,
+      "entity": {
+        "precision": 1.0,
+        "recall": 0.0833,
+        "f1": 0.1538,
+        "matched": 10,
+        "predicted": 10,
+        "gold": 120
+      },
+      "fact": {
+        "precision": 1.0,
+        "recall": 0.08,
+        "f1": 0.1481,
+        "matched": 10,
+        "predicted": 10,
+        "gold": 125
+      },
+      "state_slot": {
+        "precision": 1.0,
+        "recall": 0.1429,
+        "f1": 0.25,
+        "matched": 5,
+        "predicted": 5,
+        "gold": 35
+      }
+    }
+  },
+  "write_fidelity": {
+    "fact": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "matched": 81,
+      "predicted": 81,
+      "gold": 81
+    },
+    "state_slot_current": {
+      "accuracy": 1.0,
+      "matched": 15,
+      "expected": 15
+    },
+    "note": "脚本化 gold 经 write/pipeline 后的落库保真度，用于隔离检索链路的误差"
+  },
+  "configs": [
+    {
+      "name": "baseline_uniform",
+      "kind": "grid",
+      "config": {
+        "name": "baseline_uniform",
+        "field": "on",
+        "gamma": 0.45,
+        "hops": 2,
+        "dense_k": 30,
+        "sparse_k": 30,
+        "graph_k": 18,
+        "budget": 1400,
+        "uniform_depth": true,
+        "theta_abstain": null,
+        "note": "统一档基线：场开、D=0.45、2 轮扩散、30/30/18、预算 1400"
+      },
+      "metrics": {
+        "ndcg_at_10": 0.4079,
+        "by_category": {
+          "temporal": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "update": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "preference": {
+            "n": 1,
+            "accuracy": 1.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "multi_hop": {
+            "n": 5,
+            "accuracy": 1.0,
+            "ndcg_at_10": 0.4895,
+            "hit_at_10": 0.6,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "abstain": {
+            "n": 6,
+            "accuracy": 0.3333,
+            "ndcg_at_10": null,
+            "hit_at_10": null,
+            "miss_rate": null,
+            "errors": 0
+          }
+        },
+        "answerable": {
+          "n": 6,
+          "accuracy": 1.0,
+          "ndcg_at_10": 0.4079,
+          "hit_at_10": 0.5,
+          "miss_rate": 0.0
+        },
+        "abstain": {
+          "n": 6,
+          "false_recall_rate": 0.6667,
+          "specificity": 0.3333,
+          "precision": 1.0,
+          "correct": 2
+        },
+        "tokens": {
+          "mean": 192.0,
+          "p50": 226.5,
+          "p95": 261.4,
+          "max": 263,
+          "budget": 1400,
+          "budget_violation_rate": 0.0
+        },
+        "latency_ms": {
+          "mean": 4.19,
+          "p50": 4.54,
+          "p95": 6.27,
+          "max": 6.57
+        },
+        "field": {
+          "active_question_rate": 0.8333,
+          "mean_iterations": 1.67,
+          "mean_seeds": 5.75
+        },
+        "budget": 1400,
+        "errors": 0,
+        "quality_composite": 0.5345
+      },
+      "applied": {
+        "field_env": "1",
+        "gamma_patched": true,
+        "depth_patched": true,
+        "theta_patched": false,
+        "config": {
+          "name": "baseline_uniform",
+          "field": "on",
+          "gamma": 0.45,
+          "hops": 2,
+          "dense_k": 30,
+          "sparse_k": 30,
+          "graph_k": 18,
+          "budget": 1400,
+          "uniform_depth": true,
+          "theta_abstain": null,
+          "note": "统一档基线：场开、D=0.45、2 轮扩散、30/30/18、预算 1400"
+        },
+        "repeats": 1,
+        "field_backend": {
+          "module": "alaya.core.field",
+          "native_switch": true,
+          "has_propagate": true,
+          "has_seed_nodes": true,
+          "recall_uses_field": true,
+          "iterations_source": "REFLEX_DEPTH[*].hops",
+          "decay_source": "memory_field.DEFAULT_GAMMA",
+          "note": "场代码已落地时 ALAYA_FIELD 由核心 field.enabled 原生支持；未落地时本脚本退化为关掉图扩散"
+        }
+      },
+      "questions": [
+        {
+          "qid": "s01_q_abstain_1",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 207,
+          "latency_ms": 4.5668999664485455,
+          "n_items": 28,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_2",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 217,
+          "latency_ms": 4.155300033744425,
+          "n_items": 29,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_3",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 1.6416999860666692,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_4",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 177,
+          "latency_ms": 3.0777999782003462,
+          "n_items": 25,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_5",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 245,
+          "latency_ms": 5.1111000357195735,
+          "n_items": 32,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_6",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 1.2996000004932284,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_friend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6519527062249667,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 2,
+          "tokens_used": 251,
+          "latency_ms": 4.731900000479072,
+          "n_items": 33,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_girlfriend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6495758705413177,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 5,
+          "tokens_used": 260,
+          "latency_ms": 4.7011999995447695,
+          "n_items": 34,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_pet_name",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.07287221367144313,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 10,
+          "tokens_used": 236,
+          "latency_ms": 6.030600052326918,
+          "n_items": 28,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_roommate_city",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6045613135459197,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 3,
+          "tokens_used": 263,
+          "latency_ms": 4.512600018642843,
+          "n_items": 33,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_two_facts",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.4684505201610771,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 21,
+          "tokens_used": 192,
+          "latency_ms": 3.9154000114649534,
+          "n_items": 27,
+          "error": null
+        },
+        {
+          "qid": "s01_q_preference_1",
+          "category": "preference",
+          "pass": true,
+          "ndcg": 0.0,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 10,
+          "tokens_used": 256,
+          "latency_ms": 6.569099961780012,
+          "n_items": 32,
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "field_off",
+      "kind": "grid",
+      "config": {
+        "name": "field_off",
+        "field": "off",
+        "gamma": 0.45,
+        "hops": 2,
+        "dense_k": 30,
+        "sparse_k": 30,
+        "graph_k": 18,
+        "budget": 1400,
+        "uniform_depth": true,
+        "theta_abstain": null,
+        "note": "关语义场（ALAYA_FIELD=0），其余同基线"
+      },
+      "metrics": {
+        "ndcg_at_10": 0.5174,
+        "by_category": {
+          "temporal": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "update": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "preference": {
+            "n": 1,
+            "accuracy": 1.0,
+            "ndcg_at_10": 0.6224,
+            "hit_at_10": 1.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "multi_hop": {
+            "n": 5,
+            "accuracy": 0.8,
+            "ndcg_at_10": 0.4964,
+            "hit_at_10": 0.6,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "abstain": {
+            "n": 6,
+            "accuracy": 0.3333,
+            "ndcg_at_10": null,
+            "hit_at_10": null,
+            "miss_rate": null,
+            "errors": 0
+          }
+        },
+        "answerable": {
+          "n": 6,
+          "accuracy": 0.8333,
+          "ndcg_at_10": 0.5174,
+          "hit_at_10": 0.6667,
+          "miss_rate": 0.0
+        },
+        "abstain": {
+          "n": 6,
+          "false_recall_rate": 0.6667,
+          "specificity": 0.3333,
+          "precision": 1.0,
+          "correct": 2
+        },
+        "tokens": {
+          "mean": 89.1,
+          "p50": 93.5,
+          "p95": 146.5,
+          "max": 152,
+          "budget": 1400,
+          "budget_violation_rate": 0.0
+        },
+        "latency_ms": {
+          "mean": 1.82,
+          "p50": 1.71,
+          "p95": 2.77,
+          "max": 2.85
+        },
+        "field": {
+          "active_question_rate": 0.0,
+          "mean_iterations": 0.0,
+          "mean_seeds": 0.0
+        },
+        "budget": 1400,
+        "errors": 0,
+        "quality_composite": 0.5215
+      },
+      "applied": {
+        "field_env": "0",
+        "gamma_patched": false,
+        "depth_patched": true,
+        "theta_patched": false,
+        "config": {
+          "name": "field_off",
+          "field": "off",
+          "gamma": 0.45,
+          "hops": 2,
+          "dense_k": 30,
+          "sparse_k": 30,
+          "graph_k": 18,
+          "budget": 1400,
+          "uniform_depth": true,
+          "theta_abstain": null,
+          "note": "关语义场（ALAYA_FIELD=0），其余同基线"
+        },
+        "repeats": 1,
+        "field_backend": {
+          "module": "alaya.core.field",
+          "native_switch": true,
+          "has_propagate": true,
+          "has_seed_nodes": true,
+          "recall_uses_field": true,
+          "iterations_source": "REFLEX_DEPTH[*].hops",
+          "decay_source": "memory_field.DEFAULT_GAMMA",
+          "note": "场代码已落地时 ALAYA_FIELD 由核心 field.enabled 原生支持；未落地时本脚本退化为关掉图扩散"
+        }
+      },
+      "questions": [
+        {
+          "qid": "s01_q_abstain_1",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 93,
+          "latency_ms": 1.8720999942161143,
+          "n_items": 10,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_2",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 76,
+          "latency_ms": 1.62830000044778,
+          "n_items": 8,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_3",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 1.0920999920926988,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_4",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 64,
+          "latency_ms": 1.2824999867007136,
+          "n_items": 7,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_5",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 94,
+          "latency_ms": 1.687799987848848,
+          "n_items": 10,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_6",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 1.511799986474216,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_friend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6519527062249667,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 2,
+          "tokens_used": 129,
+          "latency_ms": 2.3313999990932643,
+          "n_items": 14,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_girlfriend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6762660076646629,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 5,
+          "tokens_used": 120,
+          "latency_ms": 1.389099983498454,
+          "n_items": 12,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_pet_name",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.08069208464393396,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 10,
+          "tokens_used": 152,
+          "latency_ms": 2.7077000122517347,
+          "n_items": 15,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_roommate_city",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6045613135459197,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 3,
+          "tokens_used": 118,
+          "latency_ms": 1.7884999979287386,
+          "n_items": 12,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_two_facts",
+          "category": "multi_hop",
+          "pass": false,
+          "ndcg": 0.4684505201610771,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 81,
+          "latency_ms": 1.739799976348877,
+          "n_items": 8,
+          "error": null
+        },
+        {
+          "qid": "s01_q_preference_1",
+          "category": "preference",
+          "pass": true,
+          "ndcg": 0.6223981596512211,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 6,
+          "tokens_used": 142,
+          "latency_ms": 2.8474999708123505,
+          "n_items": 16,
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "D_low",
+      "kind": "grid",
+      "config": {
+        "name": "D_low",
+        "field": "on",
+        "gamma": 0.25,
+        "hops": 2,
+        "dense_k": 30,
+        "sparse_k": 30,
+        "graph_k": 18,
+        "budget": 1400,
+        "uniform_depth": true,
+        "theta_abstain": null,
+        "note": "扩散强度 D=0.25"
+      },
+      "metrics": {
+        "ndcg_at_10": 0.4079,
+        "by_category": {
+          "temporal": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "update": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "preference": {
+            "n": 1,
+            "accuracy": 1.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "multi_hop": {
+            "n": 5,
+            "accuracy": 1.0,
+            "ndcg_at_10": 0.4895,
+            "hit_at_10": 0.6,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "abstain": {
+            "n": 6,
+            "accuracy": 0.3333,
+            "ndcg_at_10": null,
+            "hit_at_10": null,
+            "miss_rate": null,
+            "errors": 0
+          }
+        },
+        "answerable": {
+          "n": 6,
+          "accuracy": 1.0,
+          "ndcg_at_10": 0.4079,
+          "hit_at_10": 0.5,
+          "miss_rate": 0.0
+        },
+        "abstain": {
+          "n": 6,
+          "false_recall_rate": 0.6667,
+          "specificity": 0.3333,
+          "precision": 1.0,
+          "correct": 2
+        },
+        "tokens": {
+          "mean": 192.0,
+          "p50": 226.5,
+          "p95": 261.4,
+          "max": 263,
+          "budget": 1400,
+          "budget_violation_rate": 0.0
+        },
+        "latency_ms": {
+          "mean": 3.66,
+          "p50": 3.85,
+          "p95": 5.58,
+          "max": 6.41
+        },
+        "field": {
+          "active_question_rate": 0.8333,
+          "mean_iterations": 1.67,
+          "mean_seeds": 5.75
+        },
+        "budget": 1400,
+        "errors": 0,
+        "quality_composite": 0.5345
+      },
+      "applied": {
+        "field_env": "1",
+        "gamma_patched": true,
+        "depth_patched": true,
+        "theta_patched": false,
+        "config": {
+          "name": "D_low",
+          "field": "on",
+          "gamma": 0.25,
+          "hops": 2,
+          "dense_k": 30,
+          "sparse_k": 30,
+          "graph_k": 18,
+          "budget": 1400,
+          "uniform_depth": true,
+          "theta_abstain": null,
+          "note": "扩散强度 D=0.25"
+        },
+        "repeats": 1,
+        "field_backend": {
+          "module": "alaya.core.field",
+          "native_switch": true,
+          "has_propagate": true,
+          "has_seed_nodes": true,
+          "recall_uses_field": true,
+          "iterations_source": "REFLEX_DEPTH[*].hops",
+          "decay_source": "memory_field.DEFAULT_GAMMA",
+          "note": "场代码已落地时 ALAYA_FIELD 由核心 field.enabled 原生支持；未落地时本脚本退化为关掉图扩散"
+        }
+      },
+      "questions": [
+        {
+          "qid": "s01_q_abstain_1",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 207,
+          "latency_ms": 3.9275999879464507,
+          "n_items": 28,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_2",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 217,
+          "latency_ms": 3.351599967572838,
+          "n_items": 29,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_3",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 0.9807000169530511,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_4",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 177,
+          "latency_ms": 2.320999978110194,
+          "n_items": 25,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_5",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 245,
+          "latency_ms": 4.703699960373342,
+          "n_items": 32,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_6",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 1.505599997472018,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_friend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6519527062249667,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 2,
+          "tokens_used": 251,
+          "latency_ms": 4.378999990876764,
+          "n_items": 33,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_girlfriend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6495758705413177,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 5,
+          "tokens_used": 260,
+          "latency_ms": 3.7661999813281,
+          "n_items": 34,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_pet_name",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.07287221367144313,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 10,
+          "tokens_used": 236,
+          "latency_ms": 6.408199958968908,
+          "n_items": 28,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_roommate_city",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6045613135459197,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 3,
+          "tokens_used": 263,
+          "latency_ms": 4.563800001051277,
+          "n_items": 33,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_two_facts",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.4684505201610771,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 21,
+          "tokens_used": 192,
+          "latency_ms": 3.088099998421967,
+          "n_items": 27,
+          "error": null
+        },
+        {
+          "qid": "s01_q_preference_1",
+          "category": "preference",
+          "pass": true,
+          "ndcg": 0.0,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 10,
+          "tokens_used": 256,
+          "latency_ms": 4.906799993477762,
+          "n_items": 32,
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "D_high",
+      "kind": "grid",
+      "config": {
+        "name": "D_high",
+        "field": "on",
+        "gamma": 0.7,
+        "hops": 2,
+        "dense_k": 30,
+        "sparse_k": 30,
+        "graph_k": 18,
+        "budget": 1400,
+        "uniform_depth": true,
+        "theta_abstain": null,
+        "note": "扩散强度 D=0.70"
+      },
+      "metrics": {
+        "ndcg_at_10": 0.4079,
+        "by_category": {
+          "temporal": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "update": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "preference": {
+            "n": 1,
+            "accuracy": 1.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "multi_hop": {
+            "n": 5,
+            "accuracy": 1.0,
+            "ndcg_at_10": 0.4895,
+            "hit_at_10": 0.6,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "abstain": {
+            "n": 6,
+            "accuracy": 0.3333,
+            "ndcg_at_10": null,
+            "hit_at_10": null,
+            "miss_rate": null,
+            "errors": 0
+          }
+        },
+        "answerable": {
+          "n": 6,
+          "accuracy": 1.0,
+          "ndcg_at_10": 0.4079,
+          "hit_at_10": 0.5,
+          "miss_rate": 0.0
+        },
+        "abstain": {
+          "n": 6,
+          "false_recall_rate": 0.6667,
+          "specificity": 0.3333,
+          "precision": 1.0,
+          "correct": 2
+        },
+        "tokens": {
+          "mean": 192.0,
+          "p50": 226.5,
+          "p95": 261.4,
+          "max": 263,
+          "budget": 1400,
+          "budget_violation_rate": 0.0
+        },
+        "latency_ms": {
+          "mean": 3.69,
+          "p50": 3.94,
+          "p95": 5.22,
+          "max": 5.64
+        },
+        "field": {
+          "active_question_rate": 0.8333,
+          "mean_iterations": 1.67,
+          "mean_seeds": 5.75
+        },
+        "budget": 1400,
+        "errors": 0,
+        "quality_composite": 0.5345
+      },
+      "applied": {
+        "field_env": "1",
+        "gamma_patched": true,
+        "depth_patched": true,
+        "theta_patched": false,
+        "config": {
+          "name": "D_high",
+          "field": "on",
+          "gamma": 0.7,
+          "hops": 2,
+          "dense_k": 30,
+          "sparse_k": 30,
+          "graph_k": 18,
+          "budget": 1400,
+          "uniform_depth": true,
+          "theta_abstain": null,
+          "note": "扩散强度 D=0.70"
+        },
+        "repeats": 1,
+        "field_backend": {
+          "module": "alaya.core.field",
+          "native_switch": true,
+          "has_propagate": true,
+          "has_seed_nodes": true,
+          "recall_uses_field": true,
+          "iterations_source": "REFLEX_DEPTH[*].hops",
+          "decay_source": "memory_field.DEFAULT_GAMMA",
+          "note": "场代码已落地时 ALAYA_FIELD 由核心 field.enabled 原生支持；未落地时本脚本退化为关掉图扩散"
+        }
+      },
+      "questions": [
+        {
+          "qid": "s01_q_abstain_1",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 207,
+          "latency_ms": 3.7918000016361475,
+          "n_items": 28,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_2",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 217,
+          "latency_ms": 3.8093000184744596,
+          "n_items": 29,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_3",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 1.2733000330626965,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_4",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 177,
+          "latency_ms": 2.4719000211916864,
+          "n_items": 25,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_5",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 245,
+          "latency_ms": 4.70109999878332,
+          "n_items": 32,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_6",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 1.2687999987974763,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_friend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6519527062249667,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 2,
+          "tokens_used": 251,
+          "latency_ms": 4.379099991638213,
+          "n_items": 33,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_girlfriend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6495758705413177,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 5,
+          "tokens_used": 260,
+          "latency_ms": 4.063899978064001,
+          "n_items": 34,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_pet_name",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.07287221367144313,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 10,
+          "tokens_used": 236,
+          "latency_ms": 5.6387000367976725,
+          "n_items": 28,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_roommate_city",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6045613135459197,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 3,
+          "tokens_used": 263,
+          "latency_ms": 4.66280005639419,
+          "n_items": 33,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_two_facts",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.4684505201610771,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 21,
+          "tokens_used": 192,
+          "latency_ms": 3.3421999542042613,
+          "n_items": 27,
+          "error": null
+        },
+        {
+          "qid": "s01_q_preference_1",
+          "category": "preference",
+          "pass": true,
+          "ndcg": 0.0,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 10,
+          "tokens_used": 256,
+          "latency_ms": 4.870900011155754,
+          "n_items": 32,
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "hops_1",
+      "kind": "grid",
+      "config": {
+        "name": "hops_1",
+        "field": "on",
+        "gamma": 0.45,
+        "hops": 1,
+        "dense_k": 30,
+        "sparse_k": 30,
+        "graph_k": 18,
+        "budget": 1400,
+        "uniform_depth": true,
+        "theta_abstain": null,
+        "note": "扩散迭代 1 轮"
+      },
+      "metrics": {
+        "ndcg_at_10": 0.4387,
+        "by_category": {
+          "temporal": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "update": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "preference": {
+            "n": 1,
+            "accuracy": 1.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "multi_hop": {
+            "n": 5,
+            "accuracy": 0.8,
+            "ndcg_at_10": 0.5264,
+            "hit_at_10": 0.6,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "abstain": {
+            "n": 6,
+            "accuracy": 0.3333,
+            "ndcg_at_10": null,
+            "hit_at_10": null,
+            "miss_rate": null,
+            "errors": 0
+          }
+        },
+        "answerable": {
+          "n": 6,
+          "accuracy": 0.8333,
+          "ndcg_at_10": 0.4387,
+          "hit_at_10": 0.5,
+          "miss_rate": 0.0
+        },
+        "abstain": {
+          "n": 6,
+          "false_recall_rate": 0.6667,
+          "specificity": 0.3333,
+          "precision": 1.0,
+          "correct": 2
+        },
+        "tokens": {
+          "mean": 119.2,
+          "p50": 118.0,
+          "p95": 194.3,
+          "max": 202,
+          "budget": 1400,
+          "budget_violation_rate": 0.0
+        },
+        "latency_ms": {
+          "mean": 2.86,
+          "p50": 2.58,
+          "p95": 4.83,
+          "max": 5.14
+        },
+        "field": {
+          "active_question_rate": 0.8333,
+          "mean_iterations": 0.83,
+          "mean_seeds": 5.75
+        },
+        "budget": 1400,
+        "errors": 0,
+        "quality_composite": 0.5103
+      },
+      "applied": {
+        "field_env": "1",
+        "gamma_patched": true,
+        "depth_patched": true,
+        "theta_patched": false,
+        "config": {
+          "name": "hops_1",
+          "field": "on",
+          "gamma": 0.45,
+          "hops": 1,
+          "dense_k": 30,
+          "sparse_k": 30,
+          "graph_k": 18,
+          "budget": 1400,
+          "uniform_depth": true,
+          "theta_abstain": null,
+          "note": "扩散迭代 1 轮"
+        },
+        "repeats": 1,
+        "field_backend": {
+          "module": "alaya.core.field",
+          "native_switch": true,
+          "has_propagate": true,
+          "has_seed_nodes": true,
+          "recall_uses_field": true,
+          "iterations_source": "REFLEX_DEPTH[*].hops",
+          "decay_source": "memory_field.DEFAULT_GAMMA",
+          "note": "场代码已落地时 ALAYA_FIELD 由核心 field.enabled 原生支持；未落地时本脚本退化为关掉图扩散"
+        }
+      },
+      "questions": [
+        {
+          "qid": "s01_q_abstain_1",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 115,
+          "latency_ms": 2.5425999774597585,
+          "n_items": 12,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_2",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 88,
+          "latency_ms": 2.3360999766737223,
+          "n_items": 9,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_3",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 1.1015000054612756,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_4",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 77,
+          "latency_ms": 1.5961999888531864,
+          "n_items": 8,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_5",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 121,
+          "latency_ms": 2.3718999582342803,
+          "n_items": 13,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_6",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 1.666500000283122,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_friend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6519527062249667,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 2,
+          "tokens_used": 179,
+          "latency_ms": 3.5265000187791884,
+          "n_items": 20,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_girlfriend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6495758705413177,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 5,
+          "tokens_used": 188,
+          "latency_ms": 3.107300028204918,
+          "n_items": 21,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_pet_name",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.07287221367144313,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 10,
+          "tokens_used": 173,
+          "latency_ms": 4.565200011711568,
+          "n_items": 18,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_roommate_city",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6045613135459197,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 3,
+          "tokens_used": 184,
+          "latency_ms": 3.7311000050976872,
+          "n_items": 20,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_two_facts",
+          "category": "multi_hop",
+          "pass": false,
+          "ndcg": 0.6530262169406452,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 103,
+          "latency_ms": 2.6240000152029097,
+          "n_items": 11,
+          "error": null
+        },
+        {
+          "qid": "s01_q_preference_1",
+          "category": "preference",
+          "pass": true,
+          "ndcg": 0.0,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 10,
+          "tokens_used": 202,
+          "latency_ms": 5.143699992913753,
+          "n_items": 22,
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "hops_3",
+      "kind": "grid",
+      "config": {
+        "name": "hops_3",
+        "field": "on",
+        "gamma": 0.45,
+        "hops": 3,
+        "dense_k": 30,
+        "sparse_k": 30,
+        "graph_k": 18,
+        "budget": 1400,
+        "uniform_depth": true,
+        "theta_abstain": null,
+        "note": "扩散迭代 3 轮"
+      },
+      "metrics": {
+        "ndcg_at_10": 0.4374,
+        "by_category": {
+          "temporal": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "update": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "preference": {
+            "n": 1,
+            "accuracy": 1.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "multi_hop": {
+            "n": 5,
+            "accuracy": 1.0,
+            "ndcg_at_10": 0.5249,
+            "hit_at_10": 0.6,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "abstain": {
+            "n": 6,
+            "accuracy": 0.3333,
+            "ndcg_at_10": null,
+            "hit_at_10": null,
+            "miss_rate": null,
+            "errors": 0
+          }
+        },
+        "answerable": {
+          "n": 6,
+          "accuracy": 1.0,
+          "ndcg_at_10": 0.4374,
+          "hit_at_10": 0.5,
+          "miss_rate": 0.0
+        },
+        "abstain": {
+          "n": 6,
+          "false_recall_rate": 0.6667,
+          "specificity": 0.3333,
+          "precision": 1.0,
+          "correct": 2
+        },
+        "tokens": {
+          "mean": 235.3,
+          "p50": 288.0,
+          "p95": 304.0,
+          "max": 304,
+          "budget": 1400,
+          "budget_violation_rate": 0.0
+        },
+        "latency_ms": {
+          "mean": 5.08,
+          "p50": 5.57,
+          "p95": 7.06,
+          "max": 7.07
+        },
+        "field": {
+          "active_question_rate": 0.8333,
+          "mean_iterations": 2.5,
+          "mean_seeds": 5.75
+        },
+        "budget": 1400,
+        "errors": 0,
+        "quality_composite": 0.5387
+      },
+      "applied": {
+        "field_env": "1",
+        "gamma_patched": true,
+        "depth_patched": true,
+        "theta_patched": false,
+        "config": {
+          "name": "hops_3",
+          "field": "on",
+          "gamma": 0.45,
+          "hops": 3,
+          "dense_k": 30,
+          "sparse_k": 30,
+          "graph_k": 18,
+          "budget": 1400,
+          "uniform_depth": true,
+          "theta_abstain": null,
+          "note": "扩散迭代 3 轮"
+        },
+        "repeats": 1,
+        "field_backend": {
+          "module": "alaya.core.field",
+          "native_switch": true,
+          "has_propagate": true,
+          "has_seed_nodes": true,
+          "recall_uses_field": true,
+          "iterations_source": "REFLEX_DEPTH[*].hops",
+          "decay_source": "memory_field.DEFAULT_GAMMA",
+          "note": "场代码已落地时 ALAYA_FIELD 由核心 field.enabled 原生支持；未落地时本脚本退化为关掉图扩散"
+        }
+      },
+      "questions": [
+        {
+          "qid": "s01_q_abstain_1",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 243,
+          "latency_ms": 4.765600024256855,
+          "n_items": 31,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_2",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 269,
+          "latency_ms": 5.4008999723009765,
+          "n_items": 33,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_3",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 1.3209000462666154,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_4",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 304,
+          "latency_ms": 4.690399975515902,
+          "n_items": 36,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_5",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 297,
+          "latency_ms": 5.846400046721101,
+          "n_items": 36,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_6",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 1.3279999839141965,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_friend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6519527062249667,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 2,
+          "tokens_used": 290,
+          "latency_ms": 7.068299979437143,
+          "n_items": 36,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_girlfriend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6495758705413177,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 5,
+          "tokens_used": 286,
+          "latency_ms": 6.333800032734871,
+          "n_items": 36,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_pet_name",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.07287221367144313,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 10,
+          "tokens_used": 237,
+          "latency_ms": 7.060700037982315,
+          "n_items": 28,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_roommate_city",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6045613135459197,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 3,
+          "tokens_used": 301,
+          "latency_ms": 5.729199969209731,
+          "n_items": 36,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_two_facts",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6456898069451248,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 21,
+          "tokens_used": 293,
+          "latency_ms": 5.327599996235222,
+          "n_items": 36,
+          "error": null
+        },
+        {
+          "qid": "s01_q_preference_1",
+          "category": "preference",
+          "pass": true,
+          "ndcg": 0.0,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 10,
+          "tokens_used": 304,
+          "latency_ms": 6.127600034233183,
+          "n_items": 36,
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "depth_shallow",
+      "kind": "grid",
+      "config": {
+        "name": "depth_shallow",
+        "field": "on",
+        "gamma": 0.45,
+        "hops": 2,
+        "dense_k": 12,
+        "sparse_k": 12,
+        "graph_k": 8,
+        "budget": 1400,
+        "uniform_depth": true,
+        "theta_abstain": null,
+        "note": "检索深度 12/12/8"
+      },
+      "metrics": {
+        "ndcg_at_10": 0.4085,
+        "by_category": {
+          "temporal": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "update": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "preference": {
+            "n": 1,
+            "accuracy": 1.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "multi_hop": {
+            "n": 5,
+            "accuracy": 0.8,
+            "ndcg_at_10": 0.4902,
+            "hit_at_10": 0.6,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "abstain": {
+            "n": 6,
+            "accuracy": 0.3333,
+            "ndcg_at_10": null,
+            "hit_at_10": null,
+            "miss_rate": null,
+            "errors": 0
+          }
+        },
+        "answerable": {
+          "n": 6,
+          "accuracy": 0.8333,
+          "ndcg_at_10": 0.4085,
+          "hit_at_10": 0.5,
+          "miss_rate": 0.0
+        },
+        "abstain": {
+          "n": 6,
+          "false_recall_rate": 0.6667,
+          "specificity": 0.3333,
+          "precision": 1.0,
+          "correct": 2
+        },
+        "tokens": {
+          "mean": 123.5,
+          "p50": 144.0,
+          "p95": 168.0,
+          "max": 168,
+          "budget": 1400,
+          "budget_violation_rate": 0.0
+        },
+        "latency_ms": {
+          "mean": 3.69,
+          "p50": 3.53,
+          "p95": 4.92,
+          "max": 5.3
+        },
+        "field": {
+          "active_question_rate": 0.8333,
+          "mean_iterations": 1.67,
+          "mean_seeds": 5.5
+        },
+        "budget": 1400,
+        "errors": 0,
+        "quality_composite": 0.506
+      },
+      "applied": {
+        "field_env": "1",
+        "gamma_patched": true,
+        "depth_patched": true,
+        "theta_patched": false,
+        "config": {
+          "name": "depth_shallow",
+          "field": "on",
+          "gamma": 0.45,
+          "hops": 2,
+          "dense_k": 12,
+          "sparse_k": 12,
+          "graph_k": 8,
+          "budget": 1400,
+          "uniform_depth": true,
+          "theta_abstain": null,
+          "note": "检索深度 12/12/8"
+        },
+        "repeats": 1,
+        "field_backend": {
+          "module": "alaya.core.field",
+          "native_switch": true,
+          "has_propagate": true,
+          "has_seed_nodes": true,
+          "recall_uses_field": true,
+          "iterations_source": "REFLEX_DEPTH[*].hops",
+          "decay_source": "memory_field.DEFAULT_GAMMA",
+          "note": "场代码已落地时 ALAYA_FIELD 由核心 field.enabled 原生支持；未落地时本脚本退化为关掉图扩散"
+        }
+      },
+      "questions": [
+        {
+          "qid": "s01_q_abstain_1",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 121,
+          "latency_ms": 3.054699976928532,
+          "n_items": 13,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_2",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 124,
+          "latency_ms": 3.035700006876141,
+          "n_items": 15,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_3",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 3.065900004003197,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_4",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 135,
+          "latency_ms": 4.539200046565384,
+          "n_items": 18,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_5",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 153,
+          "latency_ms": 4.616099991835654,
+          "n_items": 18,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_6",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 2.0997999818064272,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_friend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6519527062249667,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 2,
+          "tokens_used": 161,
+          "latency_ms": 5.298500007484108,
+          "n_items": 18,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_girlfriend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6495758705413177,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 5,
+          "tokens_used": 164,
+          "latency_ms": 3.2558999955654144,
+          "n_items": 18,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_pet_name",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.07636655561934667,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 12,
+          "tokens_used": 142,
+          "latency_ms": 3.7637000204995275,
+          "n_items": 14,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_roommate_city",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6045613135459197,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 3,
+          "tokens_used": 168,
+          "latency_ms": 4.523799987509847,
+          "n_items": 18,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_two_facts",
+          "category": "multi_hop",
+          "pass": false,
+          "ndcg": 0.4684505201610771,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 146,
+          "latency_ms": 3.303700010292232,
+          "n_items": 18,
+          "error": null
+        },
+        {
+          "qid": "s01_q_preference_1",
+          "category": "preference",
+          "pass": true,
+          "ndcg": 0.0,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 10,
+          "tokens_used": 168,
+          "latency_ms": 3.7666999851353467,
+          "n_items": 18,
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "depth_deep",
+      "kind": "grid",
+      "config": {
+        "name": "depth_deep",
+        "field": "on",
+        "gamma": 0.45,
+        "hops": 2,
+        "dense_k": 60,
+        "sparse_k": 60,
+        "graph_k": 40,
+        "budget": 1400,
+        "uniform_depth": true,
+        "theta_abstain": null,
+        "note": "检索深度 60/60/40"
+      },
+      "metrics": {
+        "ndcg_at_10": 0.4079,
+        "by_category": {
+          "temporal": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "update": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "preference": {
+            "n": 1,
+            "accuracy": 1.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "multi_hop": {
+            "n": 5,
+            "accuracy": 1.0,
+            "ndcg_at_10": 0.4895,
+            "hit_at_10": 0.6,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "abstain": {
+            "n": 6,
+            "accuracy": 0.3333,
+            "ndcg_at_10": null,
+            "hit_at_10": null,
+            "miss_rate": null,
+            "errors": 0
+          }
+        },
+        "answerable": {
+          "n": 6,
+          "accuracy": 1.0,
+          "ndcg_at_10": 0.4079,
+          "hit_at_10": 0.5,
+          "miss_rate": 0.0
+        },
+        "abstain": {
+          "n": 6,
+          "false_recall_rate": 0.6667,
+          "specificity": 0.3333,
+          "precision": 1.0,
+          "correct": 2
+        },
+        "tokens": {
+          "mean": 194.7,
+          "p50": 231.0,
+          "p95": 265.2,
+          "max": 268,
+          "budget": 1400,
+          "budget_violation_rate": 0.0
+        },
+        "latency_ms": {
+          "mean": 4.31,
+          "p50": 4.6,
+          "p95": 6.21,
+          "max": 6.35
+        },
+        "field": {
+          "active_question_rate": 0.8333,
+          "mean_iterations": 1.67,
+          "mean_seeds": 5.75
+        },
+        "budget": 1400,
+        "errors": 0,
+        "quality_composite": 0.5345
+      },
+      "applied": {
+        "field_env": "1",
+        "gamma_patched": true,
+        "depth_patched": true,
+        "theta_patched": false,
+        "config": {
+          "name": "depth_deep",
+          "field": "on",
+          "gamma": 0.45,
+          "hops": 2,
+          "dense_k": 60,
+          "sparse_k": 60,
+          "graph_k": 40,
+          "budget": 1400,
+          "uniform_depth": true,
+          "theta_abstain": null,
+          "note": "检索深度 60/60/40"
+        },
+        "repeats": 1,
+        "field_backend": {
+          "module": "alaya.core.field",
+          "native_switch": true,
+          "has_propagate": true,
+          "has_seed_nodes": true,
+          "recall_uses_field": true,
+          "iterations_source": "REFLEX_DEPTH[*].hops",
+          "decay_source": "memory_field.DEFAULT_GAMMA",
+          "note": "场代码已落地时 ALAYA_FIELD 由核心 field.enabled 原生支持；未落地时本脚本退化为关掉图扩散"
+        }
+      },
+      "questions": [
+        {
+          "qid": "s01_q_abstain_1",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 207,
+          "latency_ms": 3.34689998999238,
+          "n_items": 28,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_2",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 217,
+          "latency_ms": 4.1043999954126775,
+          "n_items": 29,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_3",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 1.2185000232420862,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_4",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 177,
+          "latency_ms": 3.1990999705158174,
+          "n_items": 25,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_5",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 245,
+          "latency_ms": 5.0448999973014,
+          "n_items": 32,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_6",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 1.2658999767154455,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_friend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6519527062249667,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 2,
+          "tokens_used": 251,
+          "latency_ms": 5.937399982940406,
+          "n_items": 33,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_girlfriend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6495758705413177,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 5,
+          "tokens_used": 260,
+          "latency_ms": 4.366800014395267,
+          "n_items": 34,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_pet_name",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.07287221367144313,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 10,
+          "tokens_used": 268,
+          "latency_ms": 6.091699993703514,
+          "n_items": 34,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_roommate_city",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6045613135459197,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 3,
+          "tokens_used": 263,
+          "latency_ms": 6.349999981466681,
+          "n_items": 33,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_two_facts",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.4684505201610771,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 21,
+          "tokens_used": 192,
+          "latency_ms": 4.830199992284179,
+          "n_items": 27,
+          "error": null
+        },
+        {
+          "qid": "s01_q_preference_1",
+          "category": "preference",
+          "pass": true,
+          "ndcg": 0.0,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 10,
+          "tokens_used": 256,
+          "latency_ms": 5.991699988953769,
+          "n_items": 32,
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "budget_low",
+      "kind": "grid",
+      "config": {
+        "name": "budget_low",
+        "field": "on",
+        "gamma": 0.45,
+        "hops": 2,
+        "dense_k": 30,
+        "sparse_k": 30,
+        "graph_k": 18,
+        "budget": 240,
+        "uniform_depth": true,
+        "theta_abstain": null,
+        "note": "注入预算 240 token"
+      },
+      "metrics": {
+        "ndcg_at_10": 0.4079,
+        "by_category": {
+          "temporal": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "update": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "preference": {
+            "n": 1,
+            "accuracy": 1.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "multi_hop": {
+            "n": 5,
+            "accuracy": 1.0,
+            "ndcg_at_10": 0.4895,
+            "hit_at_10": 0.6,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "abstain": {
+            "n": 6,
+            "accuracy": 0.3333,
+            "ndcg_at_10": null,
+            "hit_at_10": null,
+            "miss_rate": null,
+            "errors": 0
+          }
+        },
+        "answerable": {
+          "n": 6,
+          "accuracy": 1.0,
+          "ndcg_at_10": 0.4079,
+          "hit_at_10": 0.5,
+          "miss_rate": 0.0
+        },
+        "abstain": {
+          "n": 6,
+          "false_recall_rate": 0.6667,
+          "specificity": 0.3333,
+          "precision": 1.0,
+          "correct": 2
+        },
+        "tokens": {
+          "mean": 177.2,
+          "p50": 197.5,
+          "p95": 237.4,
+          "max": 238,
+          "budget": 240,
+          "budget_violation_rate": 0.0
+        },
+        "latency_ms": {
+          "mean": 3.96,
+          "p50": 4.51,
+          "p95": 5.97,
+          "max": 6.77
+        },
+        "field": {
+          "active_question_rate": 0.8333,
+          "mean_iterations": 1.67,
+          "mean_seeds": 5.75
+        },
+        "budget": 240,
+        "errors": 0,
+        "quality_composite": 0.5345
+      },
+      "applied": {
+        "field_env": "1",
+        "gamma_patched": true,
+        "depth_patched": true,
+        "theta_patched": false,
+        "config": {
+          "name": "budget_low",
+          "field": "on",
+          "gamma": 0.45,
+          "hops": 2,
+          "dense_k": 30,
+          "sparse_k": 30,
+          "graph_k": 18,
+          "budget": 240,
+          "uniform_depth": true,
+          "theta_abstain": null,
+          "note": "注入预算 240 token"
+        },
+        "repeats": 1,
+        "field_backend": {
+          "module": "alaya.core.field",
+          "native_switch": true,
+          "has_propagate": true,
+          "has_seed_nodes": true,
+          "recall_uses_field": true,
+          "iterations_source": "REFLEX_DEPTH[*].hops",
+          "decay_source": "memory_field.DEFAULT_GAMMA",
+          "note": "场代码已落地时 ALAYA_FIELD 由核心 field.enabled 原生支持；未落地时本脚本退化为关掉图扩散"
+        }
+      },
+      "questions": [
+        {
+          "qid": "s01_q_abstain_1",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 187,
+          "latency_ms": 4.645999986678362,
+          "n_items": 25,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_2",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 198,
+          "latency_ms": 3.6970999790355563,
+          "n_items": 27,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_3",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 1.1103000142611563,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_4",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 177,
+          "latency_ms": 2.7262000367045403,
+          "n_items": 25,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_5",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 235,
+          "latency_ms": 4.685599997173995,
+          "n_items": 30,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_6",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 1.2316000065766275,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_friend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6519527062249667,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 2,
+          "tokens_used": 233,
+          "latency_ms": 4.741300013847649,
+          "n_items": 30,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_girlfriend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6495758705413177,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 5,
+          "tokens_used": 233,
+          "latency_ms": 4.377500037662685,
+          "n_items": 30,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_pet_name",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.07287221367144313,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 10,
+          "tokens_used": 197,
+          "latency_ms": 5.308800027705729,
+          "n_items": 22,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_roommate_city",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6045613135459197,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 3,
+          "tokens_used": 237,
+          "latency_ms": 4.637199977878481,
+          "n_items": 28,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_two_facts",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.4684505201610771,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 21,
+          "tokens_used": 192,
+          "latency_ms": 3.6080999998375773,
+          "n_items": 27,
+          "error": null
+        },
+        {
+          "qid": "s01_q_preference_1",
+          "category": "preference",
+          "pass": true,
+          "ndcg": 0.0,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 10,
+          "tokens_used": 238,
+          "latency_ms": 6.7678000195883214,
+          "n_items": 29,
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "budget_high",
+      "kind": "grid",
+      "config": {
+        "name": "budget_high",
+        "field": "on",
+        "gamma": 0.45,
+        "hops": 2,
+        "dense_k": 30,
+        "sparse_k": 30,
+        "graph_k": 18,
+        "budget": 2000,
+        "uniform_depth": true,
+        "theta_abstain": null,
+        "note": "注入预算 2000 token"
+      },
+      "metrics": {
+        "ndcg_at_10": 0.4079,
+        "by_category": {
+          "temporal": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "update": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "preference": {
+            "n": 1,
+            "accuracy": 1.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "multi_hop": {
+            "n": 5,
+            "accuracy": 1.0,
+            "ndcg_at_10": 0.4895,
+            "hit_at_10": 0.6,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "abstain": {
+            "n": 6,
+            "accuracy": 0.3333,
+            "ndcg_at_10": null,
+            "hit_at_10": null,
+            "miss_rate": null,
+            "errors": 0
+          }
+        },
+        "answerable": {
+          "n": 6,
+          "accuracy": 1.0,
+          "ndcg_at_10": 0.4079,
+          "hit_at_10": 0.5,
+          "miss_rate": 0.0
+        },
+        "abstain": {
+          "n": 6,
+          "false_recall_rate": 0.6667,
+          "specificity": 0.3333,
+          "precision": 1.0,
+          "correct": 2
+        },
+        "tokens": {
+          "mean": 192.0,
+          "p50": 226.5,
+          "p95": 261.4,
+          "max": 263,
+          "budget": 2000,
+          "budget_violation_rate": 0.0
+        },
+        "latency_ms": {
+          "mean": 3.82,
+          "p50": 4.0,
+          "p95": 5.61,
+          "max": 5.61
+        },
+        "field": {
+          "active_question_rate": 0.8333,
+          "mean_iterations": 1.67,
+          "mean_seeds": 5.75
+        },
+        "budget": 2000,
+        "errors": 0,
+        "quality_composite": 0.5345
+      },
+      "applied": {
+        "field_env": "1",
+        "gamma_patched": true,
+        "depth_patched": true,
+        "theta_patched": false,
+        "config": {
+          "name": "budget_high",
+          "field": "on",
+          "gamma": 0.45,
+          "hops": 2,
+          "dense_k": 30,
+          "sparse_k": 30,
+          "graph_k": 18,
+          "budget": 2000,
+          "uniform_depth": true,
+          "theta_abstain": null,
+          "note": "注入预算 2000 token"
+        },
+        "repeats": 1,
+        "field_backend": {
+          "module": "alaya.core.field",
+          "native_switch": true,
+          "has_propagate": true,
+          "has_seed_nodes": true,
+          "recall_uses_field": true,
+          "iterations_source": "REFLEX_DEPTH[*].hops",
+          "decay_source": "memory_field.DEFAULT_GAMMA",
+          "note": "场代码已落地时 ALAYA_FIELD 由核心 field.enabled 原生支持；未落地时本脚本退化为关掉图扩散"
+        }
+      },
+      "questions": [
+        {
+          "qid": "s01_q_abstain_1",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 207,
+          "latency_ms": 3.971799975261092,
+          "n_items": 28,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_2",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 217,
+          "latency_ms": 4.029800009448081,
+          "n_items": 29,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_3",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 1.0864000068977475,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_4",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 177,
+          "latency_ms": 2.4123999755829573,
+          "n_items": 25,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_5",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 245,
+          "latency_ms": 4.504400014411658,
+          "n_items": 32,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_6",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 1.420699991285801,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_friend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6519527062249667,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 2,
+          "tokens_used": 251,
+          "latency_ms": 5.111899983603507,
+          "n_items": 33,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_girlfriend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6495758705413177,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 5,
+          "tokens_used": 260,
+          "latency_ms": 3.8432999863289297,
+          "n_items": 34,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_pet_name",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.07287221367144313,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 10,
+          "tokens_used": 236,
+          "latency_ms": 5.606499966233969,
+          "n_items": 28,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_roommate_city",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6045613135459197,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 3,
+          "tokens_used": 263,
+          "latency_ms": 5.605400016065687,
+          "n_items": 33,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_two_facts",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.4684505201610771,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 21,
+          "tokens_used": 192,
+          "latency_ms": 3.1832000240683556,
+          "n_items": 27,
+          "error": null
+        },
+        {
+          "qid": "s01_q_preference_1",
+          "category": "preference",
+          "pass": true,
+          "ndcg": 0.0,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 10,
+          "tokens_used": 256,
+          "latency_ms": 5.063100019469857,
+          "n_items": 32,
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "product_default",
+      "kind": "reference",
+      "config": {
+        "name": "product_default",
+        "field": "on",
+        "gamma": null,
+        "hops": null,
+        "dense_k": null,
+        "sparse_k": null,
+        "graph_k": null,
+        "budget": 1400,
+        "uniform_depth": false,
+        "theta_abstain": null,
+        "note": "产品默认：按问题自适应反射深度 + 预算倍率，不注入任何参数"
+      },
+      "metrics": {
+        "ndcg_at_10": 0.4387,
+        "by_category": {
+          "temporal": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "update": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "preference": {
+            "n": 1,
+            "accuracy": 1.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "multi_hop": {
+            "n": 5,
+            "accuracy": 0.8,
+            "ndcg_at_10": 0.5264,
+            "hit_at_10": 0.6,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "abstain": {
+            "n": 6,
+            "accuracy": 0.3333,
+            "ndcg_at_10": null,
+            "hit_at_10": null,
+            "miss_rate": null,
+            "errors": 0
+          }
+        },
+        "answerable": {
+          "n": 6,
+          "accuracy": 0.8333,
+          "ndcg_at_10": 0.4387,
+          "hit_at_10": 0.5,
+          "miss_rate": 0.0
+        },
+        "abstain": {
+          "n": 6,
+          "false_recall_rate": 0.6667,
+          "specificity": 0.3333,
+          "precision": 1.0,
+          "correct": 2
+        },
+        "tokens": {
+          "mean": 145.5,
+          "p50": 178.0,
+          "p95": 224.1,
+          "max": 245,
+          "budget": 1400,
+          "budget_violation_rate": 0.0
+        },
+        "latency_ms": {
+          "mean": 2.88,
+          "p50": 2.82,
+          "p95": 4.43,
+          "max": 4.62
+        },
+        "field": {
+          "active_question_rate": 0.8333,
+          "mean_iterations": 1.08,
+          "mean_seeds": 5.75
+        },
+        "budget": 1400,
+        "errors": 0,
+        "quality_composite": 0.5103
+      },
+      "applied": {
+        "field_env": "1",
+        "gamma_patched": false,
+        "depth_patched": false,
+        "theta_patched": false,
+        "config": {
+          "name": "product_default",
+          "field": "on",
+          "gamma": null,
+          "hops": null,
+          "dense_k": null,
+          "sparse_k": null,
+          "graph_k": null,
+          "budget": 1400,
+          "uniform_depth": false,
+          "theta_abstain": null,
+          "note": "产品默认：按问题自适应反射深度 + 预算倍率，不注入任何参数"
+        },
+        "repeats": 1,
+        "field_backend": {
+          "module": "alaya.core.field",
+          "native_switch": true,
+          "has_propagate": true,
+          "has_seed_nodes": true,
+          "recall_uses_field": true,
+          "iterations_source": "REFLEX_DEPTH[*].hops",
+          "decay_source": "memory_field.DEFAULT_GAMMA",
+          "note": "场代码已落地时 ALAYA_FIELD 由核心 field.enabled 原生支持；未落地时本脚本退化为关掉图扩散"
+        }
+      },
+      "questions": [
+        {
+          "qid": "s01_q_abstain_1",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 207,
+          "latency_ms": 3.860600001644343,
+          "n_items": 28,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_2",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 88,
+          "latency_ms": 1.985000038985163,
+          "n_items": 9,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_3",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 0.9858999983407557,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_4",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 177,
+          "latency_ms": 2.508700010366738,
+          "n_items": 25,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_5",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 245,
+          "latency_ms": 4.280499997548759,
+          "n_items": 32,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_6",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 1.258400036022067,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_friend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6519527062249667,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 2,
+          "tokens_used": 179,
+          "latency_ms": 3.658499976154417,
+          "n_items": 20,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_girlfriend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6495758705413177,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 5,
+          "tokens_used": 188,
+          "latency_ms": 2.860699954908341,
+          "n_items": 21,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_pet_name",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.07287221367144313,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 10,
+          "tokens_used": 173,
+          "latency_ms": 3.296000009868294,
+          "n_items": 18,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_roommate_city",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6045613135459197,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 3,
+          "tokens_used": 184,
+          "latency_ms": 2.774900000076741,
+          "n_items": 20,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_two_facts",
+          "category": "multi_hop",
+          "pass": false,
+          "ndcg": 0.6530262169406452,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 103,
+          "latency_ms": 2.459099981933832,
+          "n_items": 11,
+          "error": null
+        },
+        {
+          "qid": "s01_q_preference_1",
+          "category": "preference",
+          "pass": true,
+          "ndcg": 0.0,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 10,
+          "tokens_used": 202,
+          "latency_ms": 4.616499994881451,
+          "n_items": 22,
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "theta_030",
+      "kind": "theta",
+      "config": {
+        "name": "theta_030",
+        "field": "on",
+        "gamma": 0.45,
+        "hops": 2,
+        "dense_k": 30,
+        "sparse_k": 30,
+        "graph_k": 18,
+        "budget": 1400,
+        "uniform_depth": true,
+        "theta_abstain": 0.3,
+        "note": "拒答阈值 θ_abstain=0.3（其余同统一档基线）"
+      },
+      "metrics": {
+        "ndcg_at_10": 0.4079,
+        "by_category": {
+          "temporal": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "update": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "preference": {
+            "n": 1,
+            "accuracy": 1.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "multi_hop": {
+            "n": 5,
+            "accuracy": 1.0,
+            "ndcg_at_10": 0.4895,
+            "hit_at_10": 0.6,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "abstain": {
+            "n": 6,
+            "accuracy": 0.3333,
+            "ndcg_at_10": null,
+            "hit_at_10": null,
+            "miss_rate": null,
+            "errors": 0
+          }
+        },
+        "answerable": {
+          "n": 6,
+          "accuracy": 1.0,
+          "ndcg_at_10": 0.4079,
+          "hit_at_10": 0.5,
+          "miss_rate": 0.0
+        },
+        "abstain": {
+          "n": 6,
+          "false_recall_rate": 0.6667,
+          "specificity": 0.3333,
+          "precision": 1.0,
+          "correct": 2
+        },
+        "tokens": {
+          "mean": 192.0,
+          "p50": 226.5,
+          "p95": 261.4,
+          "max": 263,
+          "budget": 1400,
+          "budget_violation_rate": 0.0
+        },
+        "latency_ms": {
+          "mean": 4.19,
+          "p50": 4.01,
+          "p95": 7.03,
+          "max": 7.43
+        },
+        "field": {
+          "active_question_rate": 0.8333,
+          "mean_iterations": 1.67,
+          "mean_seeds": 5.75
+        },
+        "budget": 1400,
+        "errors": 0,
+        "quality_composite": 0.5345
+      },
+      "applied": {
+        "field_env": "1",
+        "gamma_patched": true,
+        "depth_patched": true,
+        "theta_patched": true,
+        "config": {
+          "name": "theta_030",
+          "field": "on",
+          "gamma": 0.45,
+          "hops": 2,
+          "dense_k": 30,
+          "sparse_k": 30,
+          "graph_k": 18,
+          "budget": 1400,
+          "uniform_depth": true,
+          "theta_abstain": 0.3,
+          "note": "拒答阈值 θ_abstain=0.3（其余同统一档基线）"
+        },
+        "repeats": 1,
+        "field_backend": {
+          "module": "alaya.core.field",
+          "native_switch": true,
+          "has_propagate": true,
+          "has_seed_nodes": true,
+          "recall_uses_field": true,
+          "iterations_source": "REFLEX_DEPTH[*].hops",
+          "decay_source": "memory_field.DEFAULT_GAMMA",
+          "note": "场代码已落地时 ALAYA_FIELD 由核心 field.enabled 原生支持；未落地时本脚本退化为关掉图扩散"
+        }
+      },
+      "questions": [
+        {
+          "qid": "s01_q_abstain_1",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 207,
+          "latency_ms": 3.264600003603846,
+          "n_items": 28,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_2",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 217,
+          "latency_ms": 3.139199980068952,
+          "n_items": 29,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_3",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 1.1104000150226057,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_4",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 177,
+          "latency_ms": 3.9855000213719904,
+          "n_items": 25,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_5",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 245,
+          "latency_ms": 4.380800004582852,
+          "n_items": 32,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_6",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 1.083299983292818,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_friend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6519527062249667,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 2,
+          "tokens_used": 251,
+          "latency_ms": 3.9464000146836042,
+          "n_items": 33,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_girlfriend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6495758705413177,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 5,
+          "tokens_used": 260,
+          "latency_ms": 4.037500009872019,
+          "n_items": 34,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_pet_name",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.07287221367144313,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 10,
+          "tokens_used": 236,
+          "latency_ms": 7.425999967381358,
+          "n_items": 28,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_roommate_city",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6045613135459197,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 3,
+          "tokens_used": 263,
+          "latency_ms": 6.13829999929294,
+          "n_items": 33,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_two_facts",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.4684505201610771,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 21,
+          "tokens_used": 192,
+          "latency_ms": 5.11600001482293,
+          "n_items": 27,
+          "error": null
+        },
+        {
+          "qid": "s01_q_preference_1",
+          "category": "preference",
+          "pass": true,
+          "ndcg": 0.0,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 10,
+          "tokens_used": 256,
+          "latency_ms": 6.71019998844713,
+          "n_items": 32,
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "theta_042",
+      "kind": "theta",
+      "config": {
+        "name": "theta_042",
+        "field": "on",
+        "gamma": 0.45,
+        "hops": 2,
+        "dense_k": 30,
+        "sparse_k": 30,
+        "graph_k": 18,
+        "budget": 1400,
+        "uniform_depth": true,
+        "theta_abstain": 0.42,
+        "note": "拒答阈值 θ_abstain=0.42（其余同统一档基线）"
+      },
+      "metrics": {
+        "ndcg_at_10": 0.4079,
+        "by_category": {
+          "temporal": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "update": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "preference": {
+            "n": 1,
+            "accuracy": 1.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "multi_hop": {
+            "n": 5,
+            "accuracy": 1.0,
+            "ndcg_at_10": 0.4895,
+            "hit_at_10": 0.6,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "abstain": {
+            "n": 6,
+            "accuracy": 0.3333,
+            "ndcg_at_10": null,
+            "hit_at_10": null,
+            "miss_rate": null,
+            "errors": 0
+          }
+        },
+        "answerable": {
+          "n": 6,
+          "accuracy": 1.0,
+          "ndcg_at_10": 0.4079,
+          "hit_at_10": 0.5,
+          "miss_rate": 0.0
+        },
+        "abstain": {
+          "n": 6,
+          "false_recall_rate": 0.6667,
+          "specificity": 0.3333,
+          "precision": 1.0,
+          "correct": 2
+        },
+        "tokens": {
+          "mean": 192.0,
+          "p50": 226.5,
+          "p95": 261.4,
+          "max": 263,
+          "budget": 1400,
+          "budget_violation_rate": 0.0
+        },
+        "latency_ms": {
+          "mean": 3.99,
+          "p50": 4.34,
+          "p95": 5.6,
+          "max": 5.84
+        },
+        "field": {
+          "active_question_rate": 0.8333,
+          "mean_iterations": 1.67,
+          "mean_seeds": 5.75
+        },
+        "budget": 1400,
+        "errors": 0,
+        "quality_composite": 0.5345
+      },
+      "applied": {
+        "field_env": "1",
+        "gamma_patched": true,
+        "depth_patched": true,
+        "theta_patched": true,
+        "config": {
+          "name": "theta_042",
+          "field": "on",
+          "gamma": 0.45,
+          "hops": 2,
+          "dense_k": 30,
+          "sparse_k": 30,
+          "graph_k": 18,
+          "budget": 1400,
+          "uniform_depth": true,
+          "theta_abstain": 0.42,
+          "note": "拒答阈值 θ_abstain=0.42（其余同统一档基线）"
+        },
+        "repeats": 1,
+        "field_backend": {
+          "module": "alaya.core.field",
+          "native_switch": true,
+          "has_propagate": true,
+          "has_seed_nodes": true,
+          "recall_uses_field": true,
+          "iterations_source": "REFLEX_DEPTH[*].hops",
+          "decay_source": "memory_field.DEFAULT_GAMMA",
+          "note": "场代码已落地时 ALAYA_FIELD 由核心 field.enabled 原生支持；未落地时本脚本退化为关掉图扩散"
+        }
+      },
+      "questions": [
+        {
+          "qid": "s01_q_abstain_1",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 207,
+          "latency_ms": 4.503900010604411,
+          "n_items": 28,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_2",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 217,
+          "latency_ms": 5.396699998527765,
+          "n_items": 29,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_3",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 1.5728999860584736,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_4",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 177,
+          "latency_ms": 3.555700008291751,
+          "n_items": 25,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_5",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 245,
+          "latency_ms": 5.839899997226894,
+          "n_items": 32,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_6",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 1.3437000452540815,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_friend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6519527062249667,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 2,
+          "tokens_used": 251,
+          "latency_ms": 4.180199990514666,
+          "n_items": 33,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_girlfriend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6495758705413177,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 5,
+          "tokens_used": 260,
+          "latency_ms": 3.7911999970674515,
+          "n_items": 34,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_pet_name",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.07287221367144313,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 10,
+          "tokens_used": 236,
+          "latency_ms": 5.275900010019541,
+          "n_items": 28,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_roommate_city",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6045613135459197,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 3,
+          "tokens_used": 263,
+          "latency_ms": 4.654899996239692,
+          "n_items": 33,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_two_facts",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.4684505201610771,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 21,
+          "tokens_used": 192,
+          "latency_ms": 3.1427000067196786,
+          "n_items": 27,
+          "error": null
+        },
+        {
+          "qid": "s01_q_preference_1",
+          "category": "preference",
+          "pass": true,
+          "ndcg": 0.0,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 10,
+          "tokens_used": 256,
+          "latency_ms": 4.654899996239692,
+          "n_items": 32,
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "theta_050",
+      "kind": "theta",
+      "config": {
+        "name": "theta_050",
+        "field": "on",
+        "gamma": 0.45,
+        "hops": 2,
+        "dense_k": 30,
+        "sparse_k": 30,
+        "graph_k": 18,
+        "budget": 1400,
+        "uniform_depth": true,
+        "theta_abstain": 0.5,
+        "note": "拒答阈值 θ_abstain=0.5（其余同统一档基线）"
+      },
+      "metrics": {
+        "ndcg_at_10": 0.4079,
+        "by_category": {
+          "temporal": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "update": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "preference": {
+            "n": 1,
+            "accuracy": 1.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "multi_hop": {
+            "n": 5,
+            "accuracy": 1.0,
+            "ndcg_at_10": 0.4895,
+            "hit_at_10": 0.6,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "abstain": {
+            "n": 6,
+            "accuracy": 0.5,
+            "ndcg_at_10": null,
+            "hit_at_10": null,
+            "miss_rate": null,
+            "errors": 0
+          }
+        },
+        "answerable": {
+          "n": 6,
+          "accuracy": 1.0,
+          "ndcg_at_10": 0.4079,
+          "hit_at_10": 0.5,
+          "miss_rate": 0.0
+        },
+        "abstain": {
+          "n": 6,
+          "false_recall_rate": 0.5,
+          "specificity": 0.5,
+          "precision": 1.0,
+          "correct": 3
+        },
+        "tokens": {
+          "mean": 177.2,
+          "p50": 226.5,
+          "p95": 261.4,
+          "max": 263,
+          "budget": 1400,
+          "budget_violation_rate": 0.0
+        },
+        "latency_ms": {
+          "mean": 4.02,
+          "p50": 4.31,
+          "p95": 6.15,
+          "max": 6.71
+        },
+        "field": {
+          "active_question_rate": 0.8333,
+          "mean_iterations": 1.67,
+          "mean_seeds": 5.75
+        },
+        "budget": 1400,
+        "errors": 0,
+        "quality_composite": 0.5583
+      },
+      "applied": {
+        "field_env": "1",
+        "gamma_patched": true,
+        "depth_patched": true,
+        "theta_patched": true,
+        "config": {
+          "name": "theta_050",
+          "field": "on",
+          "gamma": 0.45,
+          "hops": 2,
+          "dense_k": 30,
+          "sparse_k": 30,
+          "graph_k": 18,
+          "budget": 1400,
+          "uniform_depth": true,
+          "theta_abstain": 0.5,
+          "note": "拒答阈值 θ_abstain=0.5（其余同统一档基线）"
+        },
+        "repeats": 1,
+        "field_backend": {
+          "module": "alaya.core.field",
+          "native_switch": true,
+          "has_propagate": true,
+          "has_seed_nodes": true,
+          "recall_uses_field": true,
+          "iterations_source": "REFLEX_DEPTH[*].hops",
+          "decay_source": "memory_field.DEFAULT_GAMMA",
+          "note": "场代码已落地时 ALAYA_FIELD 由核心 field.enabled 原生支持；未落地时本脚本退化为关掉图扩散"
+        }
+      },
+      "questions": [
+        {
+          "qid": "s01_q_abstain_1",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 207,
+          "latency_ms": 4.357099998742342,
+          "n_items": 28,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_2",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 217,
+          "latency_ms": 3.7954000290483236,
+          "n_items": 29,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_3",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 1.0501000215299428,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_4",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 2.1448000334203243,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_5",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 245,
+          "latency_ms": 6.708899978548288,
+          "n_items": 32,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_6",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 1.6130000003613532,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_friend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6519527062249667,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 2,
+          "tokens_used": 251,
+          "latency_ms": 5.686100048478693,
+          "n_items": 33,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_girlfriend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6495758705413177,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 5,
+          "tokens_used": 260,
+          "latency_ms": 4.253199964296073,
+          "n_items": 34,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_pet_name",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.07287221367144313,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 10,
+          "tokens_used": 236,
+          "latency_ms": 5.427900003269315,
+          "n_items": 28,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_roommate_city",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6045613135459197,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 3,
+          "tokens_used": 263,
+          "latency_ms": 4.92619996657595,
+          "n_items": 33,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_two_facts",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.4684505201610771,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 21,
+          "tokens_used": 192,
+          "latency_ms": 3.6308999988250434,
+          "n_items": 27,
+          "error": null
+        },
+        {
+          "qid": "s01_q_preference_1",
+          "category": "preference",
+          "pass": true,
+          "ndcg": 0.0,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 10,
+          "tokens_used": 256,
+          "latency_ms": 4.589500022120774,
+          "n_items": 32,
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "theta_054",
+      "kind": "theta",
+      "config": {
+        "name": "theta_054",
+        "field": "on",
+        "gamma": 0.45,
+        "hops": 2,
+        "dense_k": 30,
+        "sparse_k": 30,
+        "graph_k": 18,
+        "budget": 1400,
+        "uniform_depth": true,
+        "theta_abstain": 0.54,
+        "note": "拒答阈值 θ_abstain=0.54（其余同统一档基线）"
+      },
+      "metrics": {
+        "ndcg_at_10": 0.3071,
+        "by_category": {
+          "temporal": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "update": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "preference": {
+            "n": 1,
+            "accuracy": 1.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "multi_hop": {
+            "n": 5,
+            "accuracy": 0.8,
+            "ndcg_at_10": 0.3686,
+            "hit_at_10": 0.4,
+            "miss_rate": 0.2,
+            "errors": 0
+          },
+          "abstain": {
+            "n": 6,
+            "accuracy": 0.5,
+            "ndcg_at_10": null,
+            "hit_at_10": null,
+            "miss_rate": null,
+            "errors": 0
+          }
+        },
+        "answerable": {
+          "n": 6,
+          "accuracy": 0.8333,
+          "ndcg_at_10": 0.3071,
+          "hit_at_10": 0.3333,
+          "miss_rate": 0.1667
+        },
+        "abstain": {
+          "n": 6,
+          "false_recall_rate": 0.5,
+          "specificity": 0.5,
+          "precision": 0.75,
+          "correct": 3
+        },
+        "tokens": {
+          "mean": 155.3,
+          "p50": 212.0,
+          "p95": 257.8,
+          "max": 260,
+          "budget": 1400,
+          "budget_violation_rate": 0.0
+        },
+        "latency_ms": {
+          "mean": 3.77,
+          "p50": 4.24,
+          "p95": 5.04,
+          "max": 5.19
+        },
+        "field": {
+          "active_question_rate": 0.8333,
+          "mean_iterations": 1.67,
+          "mean_seeds": 5.75
+        },
+        "budget": 1400,
+        "errors": 0,
+        "quality_composite": 0.4915
+      },
+      "applied": {
+        "field_env": "1",
+        "gamma_patched": true,
+        "depth_patched": true,
+        "theta_patched": true,
+        "config": {
+          "name": "theta_054",
+          "field": "on",
+          "gamma": 0.45,
+          "hops": 2,
+          "dense_k": 30,
+          "sparse_k": 30,
+          "graph_k": 18,
+          "budget": 1400,
+          "uniform_depth": true,
+          "theta_abstain": 0.54,
+          "note": "拒答阈值 θ_abstain=0.54（其余同统一档基线）"
+        },
+        "repeats": 1,
+        "field_backend": {
+          "module": "alaya.core.field",
+          "native_switch": true,
+          "has_propagate": true,
+          "has_seed_nodes": true,
+          "recall_uses_field": true,
+          "iterations_source": "REFLEX_DEPTH[*].hops",
+          "decay_source": "memory_field.DEFAULT_GAMMA",
+          "note": "场代码已落地时 ALAYA_FIELD 由核心 field.enabled 原生支持；未落地时本脚本退化为关掉图扩散"
+        }
+      },
+      "questions": [
+        {
+          "qid": "s01_q_abstain_1",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 207,
+          "latency_ms": 5.185200017876923,
+          "n_items": 28,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_2",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 217,
+          "latency_ms": 4.836299980524927,
+          "n_items": 29,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_3",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 1.208400004543364,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_4",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 2.267999981995672,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_5",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 245,
+          "latency_ms": 4.661799990572035,
+          "n_items": 32,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_6",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 1.3670999906025827,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_friend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6519527062249667,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 2,
+          "tokens_used": 251,
+          "latency_ms": 4.904699977487326,
+          "n_items": 33,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_girlfriend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6495758705413177,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 5,
+          "tokens_used": 260,
+          "latency_ms": 3.781599982175976,
+          "n_items": 34,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_pet_name",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.07287221367144313,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 10,
+          "tokens_used": 236,
+          "latency_ms": 4.917999962344766,
+          "n_items": 28,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_roommate_city",
+          "category": "multi_hop",
+          "pass": false,
+          "ndcg": 0.0,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 3.8224999443627894,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_two_facts",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.4684505201610771,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 21,
+          "tokens_used": 192,
+          "latency_ms": 3.45810002181679,
+          "n_items": 27,
+          "error": null
+        },
+        {
+          "qid": "s01_q_preference_1",
+          "category": "preference",
+          "pass": true,
+          "ndcg": 0.0,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 10,
+          "tokens_used": 256,
+          "latency_ms": 4.782899981364608,
+          "n_items": 32,
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "theta_058",
+      "kind": "theta",
+      "config": {
+        "name": "theta_058",
+        "field": "on",
+        "gamma": 0.45,
+        "hops": 2,
+        "dense_k": 30,
+        "sparse_k": 30,
+        "graph_k": 18,
+        "budget": 1400,
+        "uniform_depth": true,
+        "theta_abstain": 0.58,
+        "note": "拒答阈值 θ_abstain=0.58（其余同统一档基线）"
+      },
+      "metrics": {
+        "ndcg_at_10": 0.295,
+        "by_category": {
+          "temporal": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "update": {
+            "n": 0,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 0.0,
+            "errors": 0
+          },
+          "preference": {
+            "n": 1,
+            "accuracy": 0.0,
+            "ndcg_at_10": 0.0,
+            "hit_at_10": 0.0,
+            "miss_rate": 1.0,
+            "errors": 0
+          },
+          "multi_hop": {
+            "n": 5,
+            "accuracy": 0.6,
+            "ndcg_at_10": 0.354,
+            "hit_at_10": 0.4,
+            "miss_rate": 0.4,
+            "errors": 0
+          },
+          "abstain": {
+            "n": 6,
+            "accuracy": 0.8333,
+            "ndcg_at_10": null,
+            "hit_at_10": null,
+            "miss_rate": null,
+            "errors": 0
+          }
+        },
+        "answerable": {
+          "n": 6,
+          "accuracy": 0.5,
+          "ndcg_at_10": 0.295,
+          "hit_at_10": 0.3333,
+          "miss_rate": 0.5
+        },
+        "abstain": {
+          "n": 6,
+          "false_recall_rate": 0.1667,
+          "specificity": 0.8333,
+          "precision": 0.625,
+          "correct": 5
+        },
+        "tokens": {
+          "mean": 79.0,
+          "p50": 0.0,
+          "p95": 255.0,
+          "max": 260,
+          "budget": 1400,
+          "budget_violation_rate": 0.0
+        },
+        "latency_ms": {
+          "mean": 3.41,
+          "p50": 3.71,
+          "p95": 4.63,
+          "max": 5.01
+        },
+        "field": {
+          "active_question_rate": 0.8333,
+          "mean_iterations": 1.67,
+          "mean_seeds": 5.75
+        },
+        "budget": 1400,
+        "errors": 0,
+        "quality_composite": 0.3183
+      },
+      "applied": {
+        "field_env": "1",
+        "gamma_patched": true,
+        "depth_patched": true,
+        "theta_patched": true,
+        "config": {
+          "name": "theta_058",
+          "field": "on",
+          "gamma": 0.45,
+          "hops": 2,
+          "dense_k": 30,
+          "sparse_k": 30,
+          "graph_k": 18,
+          "budget": 1400,
+          "uniform_depth": true,
+          "theta_abstain": 0.58,
+          "note": "拒答阈值 θ_abstain=0.58（其余同统一档基线）"
+        },
+        "repeats": 1,
+        "field_backend": {
+          "module": "alaya.core.field",
+          "native_switch": true,
+          "has_propagate": true,
+          "has_seed_nodes": true,
+          "recall_uses_field": true,
+          "iterations_source": "REFLEX_DEPTH[*].hops",
+          "decay_source": "memory_field.DEFAULT_GAMMA",
+          "note": "场代码已落地时 ALAYA_FIELD 由核心 field.enabled 原生支持；未落地时本脚本退化为关掉图扩散"
+        }
+      },
+      "questions": [
+        {
+          "qid": "s01_q_abstain_1",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 3.3269000123254955,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_2",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 4.307599971070886,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_3",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 1.296800037380308,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_4",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 2.3125000298023224,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_5",
+          "category": "abstain",
+          "pass": false,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": null,
+          "tokens_used": 245,
+          "latency_ms": 3.779800026677549,
+          "n_items": 32,
+          "error": null
+        },
+        {
+          "qid": "s01_q_abstain_6",
+          "category": "abstain",
+          "pass": true,
+          "ndcg": null,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 1.4441999956034124,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_friend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6519527062249667,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 2,
+          "tokens_used": 251,
+          "latency_ms": 5.014199996367097,
+          "n_items": 33,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_girlfriend_company",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.6495758705413177,
+          "hit_at_10": true,
+          "abstained": false,
+          "answer_rank": 5,
+          "tokens_used": 260,
+          "latency_ms": 4.1791999829001725,
+          "n_items": 34,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_pet_name",
+          "category": "multi_hop",
+          "pass": false,
+          "ndcg": 0.0,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 3.6453999928198755,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_roommate_city",
+          "category": "multi_hop",
+          "pass": false,
+          "ndcg": 0.0,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 4.120700003113598,
+          "n_items": 0,
+          "error": null
+        },
+        {
+          "qid": "s01_q_multihop_two_facts",
+          "category": "multi_hop",
+          "pass": true,
+          "ndcg": 0.4684505201610771,
+          "hit_at_10": false,
+          "abstained": false,
+          "answer_rank": 21,
+          "tokens_used": 192,
+          "latency_ms": 3.416099993046373,
+          "n_items": 27,
+          "error": null
+        },
+        {
+          "qid": "s01_q_preference_1",
+          "category": "preference",
+          "pass": false,
+          "ndcg": 0.0,
+          "hit_at_10": false,
+          "abstained": true,
+          "answer_rank": null,
+          "tokens_used": 0,
+          "latency_ms": 4.025899979751557,
+          "n_items": 0,
+          "error": null
+        }
+      ]
+    }
+  ],
+  "frontier_grid": [
+    "field_off",
+    "D_high",
+    "hops_3",
+    "budget_low"
+  ],
+  "frontier_extended": [
+    "field_off",
+    "D_high",
+    "hops_3",
+    "budget_low",
+    "theta_050",
+    "theta_054",
+    "theta_058"
+  ],
+  "field_comparison": {
+    "base": "baseline_uniform",
+    "off": "field_off",
+    "quality": {
+      "ndcg_at_10": {
+        "on": 0.4079,
+        "off": 0.5174,
+        "delta": -0.10949999999999999
+      },
+      "temporal_accuracy": {
+        "on": 0.0,
+        "off": 0.0,
+        "delta": 0.0
+      },
+      "multi_hop_accuracy": {
+        "on": 1.0,
+        "off": 0.8,
+        "delta": 0.19999999999999996
+      },
+      "update_accuracy": {
+        "on": 0.0,
+        "off": 0.0,
+        "delta": 0.0
+      },
+      "preference_accuracy": {
+        "on": 1.0,
+        "off": 1.0,
+        "delta": 0.0
+      },
+      "abstain_specificity": {
+        "on": 0.3333,
+        "off": 0.3333,
+        "delta": 0.0
+      },
+      "answer_recall": {
+        "on": 1.0,
+        "off": 1.0,
+        "delta": 0.0
+      }
+    },
+    "new_hits": 1,
+    "lost_hits": 0,
+    "answerable": 6,
+    "field_gain_rate": 0.16666666666666666,
+    "tokens": {
+      "on": 192.0,
+      "off": 89.1
+    },
+    "p95_latency": {
+      "on": 6.27,
+      "off": 2.77
+    },
+    "p95_latency_delta_pct": 1.2635379061371839,
+    "d5_quality_no_worse": false,
+    "d5_latency_within_20pct": false,
+    "d5_pass": false
+  },
+  "sensitivity": [
+    {
+      "dimension": "场开关（ALAYA_FIELD）",
+      "name": "field_off",
+      "quality_delta": -0.0129285714285714,
+      "tokens_delta_pct": -0.5359375,
+      "p95_delta_pct": -0.5582137161084529,
+      "options": [
+        {
+          "name": "field_off",
+          "quality_delta": -0.0129285714285714,
+          "tokens_delta_pct": -0.5359375,
+          "p95_delta_pct": -0.5582137161084529
+        }
+      ]
+    },
+    {
+      "dimension": "扩散强度 D",
+      "name": "D_high",
+      "quality_delta": 0.0,
+      "tokens_delta_pct": 0.0,
+      "p95_delta_pct": -0.16746411483253587,
+      "options": [
+        {
+          "name": "D_low",
+          "quality_delta": 0.0,
+          "tokens_delta_pct": 0.0,
+          "p95_delta_pct": -0.11004784688995206
+        },
+        {
+          "name": "D_high",
+          "quality_delta": 0.0,
+          "tokens_delta_pct": 0.0,
+          "p95_delta_pct": -0.16746411483253587
+        }
+      ]
+    },
+    {
+      "dimension": "扩散迭代次数",
+      "name": "hops_3",
+      "quality_delta": 0.004214285714285726,
+      "tokens_delta_pct": 0.2255208333333334,
+      "p95_delta_pct": 0.12599681020733655,
+      "options": [
+        {
+          "name": "hops_1",
+          "quality_delta": -0.02417142857142851,
+          "tokens_delta_pct": -0.37916666666666665,
+          "p95_delta_pct": -0.2296650717703349
+        },
+        {
+          "name": "hops_3",
+          "quality_delta": 0.004214285714285726,
+          "tokens_delta_pct": 0.2255208333333334,
+          "p95_delta_pct": 0.12599681020733655
+        }
+      ]
+    },
+    {
+      "dimension": "检索深度 k",
+      "name": "depth_deep",
+      "quality_delta": 0.0,
+      "tokens_delta_pct": 0.014062499999999867,
+      "p95_delta_pct": -0.009569377990430561,
+      "options": [
+        {
+          "name": "depth_shallow",
+          "quality_delta": -0.028485714285714336,
+          "tokens_delta_pct": -0.35677083333333337,
+          "p95_delta_pct": -0.215311004784689
+        },
+        {
+          "name": "depth_deep",
+          "quality_delta": 0.0,
+          "tokens_delta_pct": 0.014062499999999867,
+          "p95_delta_pct": -0.009569377990430561
+        }
+      ]
+    },
+    {
+      "dimension": "注入预算 token",
+      "name": "budget_low",
+      "quality_delta": 0.0,
+      "tokens_delta_pct": -0.07708333333333339,
+      "p95_delta_pct": -0.04784688995215314,
+      "options": [
+        {
+          "name": "budget_low",
+          "quality_delta": 0.0,
+          "tokens_delta_pct": -0.07708333333333339,
+          "p95_delta_pct": -0.04784688995215314
+        },
+        {
+          "name": "budget_high",
+          "quality_delta": 0.0,
+          "tokens_delta_pct": 0.0,
+          "p95_delta_pct": -0.10526315789473673
+        }
+      ]
+    }
+  ],
+  "recommendation": {
+    "config": "theta_050",
+    "dimension": "拒答阈值 θ_abstain",
+    "value": "0.50",
+    "dominates_baseline": true,
+    "quality_composite": 0.5582714285714286,
+    "quality_delta": 0.023814285714285788,
+    "tokens_delta_pct": -0.07708333333333339,
+    "p95_delta_pct": -0.019138755980861122,
+    "dominating_candidates": [
+      "D_low",
+      "D_high",
+      "budget_low",
+      "budget_high",
+      "theta_042",
+      "theta_050"
+    ],
+    "recommended_metrics": {
+      "quality_composite": 0.5582714285714286,
+      "ndcg_at_10": 0.4079,
+      "by_category": {
+        "temporal": {
+          "n": 0,
+          "accuracy": 0.0,
+          "ndcg_at_10": 0.0,
+          "hit_at_10": 0.0,
+          "miss_rate": 0.0,
+          "errors": 0
+        },
+        "update": {
+          "n": 0,
+          "accuracy": 0.0,
+          "ndcg_at_10": 0.0,
+          "hit_at_10": 0.0,
+          "miss_rate": 0.0,
+          "errors": 0
+        },
+        "preference": {
+          "n": 1,
+          "accuracy": 1.0,
+          "ndcg_at_10": 0.0,
+          "hit_at_10": 0.0,
+          "miss_rate": 0.0,
+          "errors": 0
+        },
+        "multi_hop": {
+          "n": 5,
+          "accuracy": 1.0,
+          "ndcg_at_10": 0.4895,
+          "hit_at_10": 0.6,
+          "miss_rate": 0.0,
+          "errors": 0
+        },
+        "abstain": {
+          "n": 6,
+          "accuracy": 0.5,
+          "ndcg_at_10": null,
+          "hit_at_10": null,
+          "miss_rate": null,
+          "errors": 0
+        }
+      },
+      "abstain": {
+        "n": 6,
+        "false_recall_rate": 0.5,
+        "specificity": 0.5,
+        "precision": 1.0,
+        "correct": 3
+      },
+      "tokens": {
+        "mean": 177.2,
+        "p50": 226.5,
+        "p95": 261.4,
+        "max": 263,
+        "budget": 1400,
+        "budget_violation_rate": 0.0
+      },
+      "latency_ms": {
+        "mean": 4.02,
+        "p50": 4.31,
+        "p95": 6.15,
+        "max": 6.71
+      }
+    },
+    "baseline_metrics": {
+      "quality_composite": 0.5344571428571429,
+      "ndcg_at_10": 0.4079,
+      "by_category": {
+        "temporal": {
+          "n": 0,
+          "accuracy": 0.0,
+          "ndcg_at_10": 0.0,
+          "hit_at_10": 0.0,
+          "miss_rate": 0.0,
+          "errors": 0
+        },
+        "update": {
+          "n": 0,
+          "accuracy": 0.0,
+          "ndcg_at_10": 0.0,
+          "hit_at_10": 0.0,
+          "miss_rate": 0.0,
+          "errors": 0
+        },
+        "preference": {
+          "n": 1,
+          "accuracy": 1.0,
+          "ndcg_at_10": 0.0,
+          "hit_at_10": 0.0,
+          "miss_rate": 0.0,
+          "errors": 0
+        },
+        "multi_hop": {
+          "n": 5,
+          "accuracy": 1.0,
+          "ndcg_at_10": 0.4895,
+          "hit_at_10": 0.6,
+          "miss_rate": 0.0,
+          "errors": 0
+        },
+        "abstain": {
+          "n": 6,
+          "accuracy": 0.3333,
+          "ndcg_at_10": null,
+          "hit_at_10": null,
+          "miss_rate": null,
+          "errors": 0
+        }
+      },
+      "abstain": {
+        "n": 6,
+        "false_recall_rate": 0.6667,
+        "specificity": 0.3333,
+        "precision": 1.0,
+        "correct": 2
+      },
+      "tokens": {
+        "mean": 192.0,
+        "p50": 226.5,
+        "p95": 261.4,
+        "max": 263,
+        "budget": 1400,
+        "budget_violation_rate": 0.0
+      },
+      "latency_ms": {
+        "mean": 4.19,
+        "p50": 4.54,
+        "p95": 6.27,
+        "max": 6.57
+      }
+    }
+  },
+  "theta_recommendation": {
+    "theta": 0.5,
+    "config": "theta_050",
+    "metrics": {
+      "ndcg_at_10": 0.4079,
+      "by_category": {
+        "temporal": {
+          "n": 0,
+          "accuracy": 0.0,
+          "ndcg_at_10": 0.0,
+          "hit_at_10": 0.0,
+          "miss_rate": 0.0,
+          "errors": 0
+        },
+        "update": {
+          "n": 0,
+          "accuracy": 0.0,
+          "ndcg_at_10": 0.0,
+          "hit_at_10": 0.0,
+          "miss_rate": 0.0,
+          "errors": 0
+        },
+        "preference": {
+          "n": 1,
+          "accuracy": 1.0,
+          "ndcg_at_10": 0.0,
+          "hit_at_10": 0.0,
+          "miss_rate": 0.0,
+          "errors": 0
+        },
+        "multi_hop": {
+          "n": 5,
+          "accuracy": 1.0,
+          "ndcg_at_10": 0.4895,
+          "hit_at_10": 0.6,
+          "miss_rate": 0.0,
+          "errors": 0
+        },
+        "abstain": {
+          "n": 6,
+          "accuracy": 0.5,
+          "ndcg_at_10": null,
+          "hit_at_10": null,
+          "miss_rate": null,
+          "errors": 0
+        }
+      },
+      "answerable": {
+        "n": 6,
+        "accuracy": 1.0,
+        "ndcg_at_10": 0.4079,
+        "hit_at_10": 0.5,
+        "miss_rate": 0.0
+      },
+      "abstain": {
+        "n": 6,
+        "false_recall_rate": 0.5,
+        "specificity": 0.5,
+        "precision": 1.0,
+        "correct": 3
+      },
+      "tokens": {
+        "mean": 177.2,
+        "p50": 226.5,
+        "p95": 261.4,
+        "max": 263,
+        "budget": 1400,
+        "budget_violation_rate": 0.0
+      },
+      "latency_ms": {
+        "mean": 4.02,
+        "p50": 4.31,
+        "p95": 6.15,
+        "max": 6.71
+      },
+      "field": {
+        "active_question_rate": 0.8333,
+        "mean_iterations": 1.67,
+        "mean_seeds": 5.75
+      },
+      "budget": 1400,
+      "errors": 0,
+      "quality_composite": 0.5583
+    }
+  },
+  "elapsed_s": 1.283
+}

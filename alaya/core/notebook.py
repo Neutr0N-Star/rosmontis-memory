@@ -1,11 +1,12 @@
 """主动记忆：她自己写、自己改、自己升格。
 
-三重寄生，不新建平行系统：
-- 笔记就是 episode（`source='notebook'`），自动继承三路召回、三空间衰减、ACT-R 激活
-- 速记与笔记的区别就是 `tier='inbox'` vs `tier='retrieval'`
-- 升格到沉淀/人设，走已有的 pages 与 persona
-
-防流水账的硬闸：只有 `what` 的条目不许进笔记层。
+整合后的写入纪律（docs/14 §1、A2 §3）：
+- 笔记就是 episode（`origin='tool'`），但 **不再自己 INSERT**：一律走 `pipeline.submit`，
+  与被动写入共用同一写入点、同一状态机、同一套 salience/enrich。
+- 速记与笔记的区别是 `state='inbox'` vs `state='note'`（`tier` 只是兼容投影）。
+- 升格到人设/页面走 `gate.decide()`；状态与审计由 `pipeline.transition()` 落。
+- 只有 what 的条目留在速记层（inbox，不可检索），这是防流水账的硬闸。
+- `notebook_promotion` 保留只读一版，不再写入；审计统一进 `item_state_log`。
 """
 
 from __future__ import annotations
@@ -16,20 +17,22 @@ import time
 
 from ..config import Config
 from . import db as DB
+from . import gate
 from . import ids as IDS
+from . import item as IT
 from . import persona as PER
+from . import pipeline as TR
 from . import promotion as PR
-from . import score as SC
-from . import text as TX
 
 log = logging.getLogger("alaya.notebook")
 
-# 人设改动的闸门
-MAX_PROMOTIONS_PER_SESSION = 2
-MAX_PERSONA_CHARS = 200
+# 人设改动的旧闸常量（判定已收口到 gate，这里保留常量名给外部引用）
+MAX_PROMOTIONS_PER_SESSION = gate.MAX_PROMOTIONS_PER_SESSION
+MAX_PERSONA_CHARS = gate.MAX_PERSONA_CHARS
 
 
 def ensure_tables(cfg: Config) -> None:
+    """兼容表：`notebook_promotion` 只读保留一版（A2 §3.3）。"""
     with DB.tx(cfg.db_path) as conn:
         conn.execute(
             """CREATE TABLE IF NOT EXISTS notebook_promotion (
@@ -58,10 +61,11 @@ def remember(
     topic: str = "",
     t_event: float | None = None,
 ) -> dict:
-    """写一条笔记。
+    """写一条笔记（统一管线）。
 
     四段：what / noticed / means / next。
     **只有 what 的条目进速记层（inbox），不进笔记层。** 这是防流水账的硬闸。
+    写入后结构投影由 pipeline 排进异步 enrich——主动条目从此也有 entity/fact/超边。
     """
     ensure_tables(cfg)
     now = time.time()
@@ -75,43 +79,50 @@ def remember(
     next_step = (next_step or "").strip()
     has_second_layer = bool(noticed or means or next_step)
 
-    tier = PR.TIER_RETRIEVAL if has_second_layer else "inbox"
     body = _compose(what, noticed, means, next_step)
-    emo = SC.emotion_intensity(body)
-    salience = 0.55 + (0.12 if means else 0) + (0.10 if next_step else 0) + emo * 0.15
+    segments = {"what": what, "noticed": noticed, "means": means, "next": next_step}
+    meta = dict(segments)
+    meta["topic"] = (topic or "").strip()
 
-    ep_id = "ep_nb_" + IDS._digest(session_id, body, int(t_event))  # noqa: SLF001
-    emb = embedder.embed_blob(body) if embedder is not None else None
+    emb = None
+    if embedder is not None:
+        try:
+            # 降级期不写哈希伪向量（I4：两入口一致）
+            emb = None if getattr(embedder, "degraded", False) else embedder.embed_blob(body)
+        except Exception:
+            emb = None
 
-    with DB.tx(cfg.db_path) as conn:
-        exists = conn.execute("SELECT id FROM episode WHERE id=?", (ep_id,)).fetchone()
-        if exists:
-            return {"ok": True, "id": ep_id, "duplicate": True, "tier": tier}
-
-        conn.execute(
-            """INSERT INTO episode
-               (id,session_id,seq,role,text,t_event,t_ingest,source,tier,memory_type,author,
-                salience,emotion,embedding,meta_json)
-               VALUES(?,?,0,'self',?,?,?,'notebook',?,'fact','self',?,?,?,?)""",
-            (
-                ep_id, session_id, body, t_event, now, tier,
-                min(1.0, salience), emo, emb,
-                json.dumps(
-                    {"what": what, "noticed": noticed, "means": means, "next": next_step, "topic": topic},
-                    ensure_ascii=False,
-                ),
-            ),
-        )
-        conn.execute(
-            "INSERT INTO episode_fts(episode_id,tokens) VALUES(?,?)",
-            (ep_id, " ".join(TX.tokenize(body + " " + topic))),
-        )
+    item = IT.MemoryItem(
+        id="",
+        session_id=session_id,
+        text=body,
+        origin=IT.ORIGIN_TOOL,
+        actor=IT.ACTOR_MODEL,
+        memory_type=PR.T_FACT,
+        segments=segments,
+        salience=0.0,  # 0 = 交给管线的单一 salience 实现
+        emotion=0.0,   # 0 = 交给管线的单一 emotion 实现
+        t_event=t_event,
+        t_ingest=now,
+        role="self",
+        source="notebook",
+        author=PR.A_SELF,
+        embedding=emb,
+        meta=meta,
+    )
+    sub = TR.submit(item, project=True, cfg=cfg, embedder=embedder)
+    if sub.duplicate:
+        return {"ok": True, "id": sub.item_id, "duplicate": True, "tier": sub.tier, "state": sub.state}
+    if not sub.ok:
+        return {"ok": False, "reason": sub.reason}
 
     return {
         "ok": True,
-        "id": ep_id,
-        "tier": tier,
+        "id": sub.item_id,
+        "state": sub.state,
+        "tier": sub.tier,
         "has_second_layer": has_second_layer,
+        "enrich_queued": sub.enrich_queued,
         "note": "进了笔记层" if has_second_layer else "只有 what，留在速记层，会话结束时会整理或丢弃",
     }
 
@@ -130,9 +141,8 @@ def _compose(what: str, noticed: str, means: str, next_step: str) -> str:
 
 # ── 订正 ──────────────────────────────────────────────────────
 def revise(cfg: Config, note_id: str, new_text: str, reason: str = "", author: str = PR.A_SELF) -> dict:
-    """订正一条笔记。复用 episode 的 correction 机制：原文不删，新条指回旧条。"""
+    """订正一条笔记。原文不删，新条指回旧条；状态继承旧条，旧条留 revise 审计。"""
     ensure_tables(cfg)
-    now = time.time()
     with DB.reader(cfg.db_path) as conn:
         r = conn.execute("SELECT * FROM episode WHERE id=?", (note_id,)).fetchone()
     if r is None:
@@ -140,43 +150,50 @@ def revise(cfg: Config, note_id: str, new_text: str, reason: str = "", author: s
     if r["source"] != "notebook":
         return {"ok": False, "reason": "只能订正自己写的笔记"}
 
+    now = time.time()
+    old = IT.MemoryItem.from_row(r)
     new_id = "ep_corr_" + IDS._digest(note_id, new_text, int(now))  # noqa: SLF001
-    meta = {}
-    try:
-        meta = json.loads(r["meta_json"] or "{}")
-    except Exception:
-        pass
-    meta["revise_reason"] = reason
-    meta["revised_from"] = note_id
+    item = IT.MemoryItem(
+        id=new_id,
+        session_id=old.session_id,
+        text=(new_text or "").strip(),
+        origin=IT.ORIGIN_TOOL,
+        actor=IT.ACTOR_MODEL,
+        memory_type=old.memory_type,
+        state=old.state,  # 继承旧条状态（inbox 仍是 inbox）
+        salience=max(0.5, old.salience),
+        emotion=old.emotion or 0.0,
+        t_event=now,
+        t_ingest=now,
+        role="correction",
+        source="notebook",
+        author=author,
+        meta={"revise_reason": reason, "revised_from": note_id, "is_correction": True},
+    )
+    sub = TR.submit(item, project=True, cfg=cfg)
+    if not sub.ok:
+        return {"ok": False, "reason": sub.reason}
+    if sub.duplicate:
+        return {"ok": True, "new_id": sub.item_id, "old_id": note_id, "duplicate": True}
 
     with DB.tx(cfg.db_path) as conn:
-        conn.execute(
-            """INSERT OR IGNORE INTO episode
-               (id,session_id,seq,role,text,t_event,t_ingest,source,tier,memory_type,author,
-                salience,emotion,correction_of,meta_json)
-               VALUES(?,?,?,'self',?,?,?,'notebook',?,'fact',?,?,?,?,?)""",
-            (
-                new_id, r["session_id"], r["seq"], new_text, now, now,
-                r["tier"], author, max(0.5, r["salience"]), r["emotion"] or 0.0, note_id,
-                json.dumps(meta, ensure_ascii=False),
-            ),
-        )
-        conn.execute("UPDATE episode SET superseded_by=? WHERE id=?", (new_id, note_id))
-        conn.execute(
-            "INSERT INTO episode_fts(episode_id,tokens) VALUES(?,?)",
-            (new_id, " ".join(TX.tokenize(new_text))),
-        )
-    return {"ok": True, "new_id": new_id, "old_id": note_id, "note": "旧说法保留但不再浮现"}
+        conn.execute("UPDATE episode SET superseded_by=? WHERE id=?", (sub.item_id, note_id))
+
+    TR.transition(
+        note_id, "revise", target=sub.item_id, reason=reason or "订正",
+        actor=IT.ACTOR_MODEL, cfg=cfg,
+    )
+    return {"ok": True, "new_id": sub.item_id, "old_id": note_id, "note": "旧说法保留但不再浮现"}
 
 
 # ── 升格 ──────────────────────────────────────────────────────
 def promote(cfg: Config, note_id: str, target: str = "persona", section: str = "free", session_id: str = "") -> dict:
     """把笔记升格到沉淀或人设。
 
-    三道闸：频率（单次会话 ≤2）、幅度（≤200 字）、来源（必须是笔记）。
+    判定收口 `gate.decide()`：PR 硬限制 + 频率（≤2/会话）+ 幅度（≤200 字）+ 来源（必须笔记）
+    + 系统不越权（system 产物不能直进 persona/page）。落库与审计由 pipeline.transition 完成。
     """
     ensure_tables(cfg)
-    now = time.time()
     target = (target or "").lower()
     if target not in ("persona", "page"):
         return {"ok": False, "reason": "target 只能是 persona 或 page"}
@@ -189,72 +206,59 @@ def promote(cfg: Config, note_id: str, target: str = "persona", section: str = "
         return {"ok": False, "reason": "只有自己写的笔记才能升格"}
     if r["superseded_by"]:
         return {"ok": False, "reason": "这条已被订正，请升格新版"}
-    sid = session_id or r["session_id"]
 
-    text = _essence(r)
-    if len(text) > MAX_PERSONA_CHARS:
-        return {
-            "ok": False,
-            "reason": f"单条升格内容超过 {MAX_PERSONA_CHARS} 字（当前 {len(text)}），先精简",
-        }
+    item = IT.MemoryItem.from_row(r)
+    sid = session_id or item.session_id
+    action = "promote_persona" if target == "persona" else "promote_page"
+    dec = gate.decide(item, action, target=section, cfg=cfg, session_id=sid)
+    if not dec["ok"]:
+        return {"ok": False, "reason": dec["reason"], "from": dec["from"], "to": dec["from"]}
+
+    text = item.promotion_text()
 
     if target == "persona":
-        n = _promotions_in_session(cfg, sid, "persona")
-        if n >= MAX_PROMOTIONS_PER_SESSION:
-            return {
-                "ok": False,
-                "reason": f"单次会话最多改 {MAX_PROMOTIONS_PER_SESSION} 次人设（已用 {n} 次）。人格不该每天推翻",
-            }
-        pid = PER.add(cfg, r["session_id"], text, section, author=PR.A_SELF, protected=False, priority=60)
-        _record(cfg, sid, note_id, "persona", pid, {"text": text, "section": section})
-        return {"ok": True, "target": "persona", "id": pid, "text": text, "note": "已写入人格，下一次 build_context 立刻生效"}
+        pid = PER.add(cfg, item.session_id, text, section, author=PR.A_SELF, protected=False, priority=60)
+        tr = TR.transition(
+            note_id, action, target=pid, reason=dec["reason"], actor=IT.ACTOR_MODEL,
+            cfg=cfg, gate_decision=dec,
+        )
+        if not tr.ok:
+            return {"ok": False, "reason": tr.reason}
+        return {
+            "ok": True,
+            "target": "persona",
+            "id": pid,
+            "text": text,
+            "from": dec["from"],
+            "to": tr.to_state,
+            "state": tr.to_state,
+            "note": "已写入人格，下一次 build_context 立刻生效",
+        }
 
     # page：并入常驻活文档对应分区
     page_key = "relationship" if section == "relationship" else "user_profile"
-    _append_to_page(cfg, r["session_id"], page_key, text)
-    _record(cfg, sid, note_id, "page", page_key, {"text": text})
-    return {"ok": True, "target": "page", "id": page_key, "text": text, "note": "已并入常驻活文档"}
+    _append_to_page(cfg, item.session_id, page_key, text)
+    tr = TR.transition(
+        note_id, action, target=page_key, reason=dec["reason"], actor=IT.ACTOR_MODEL,
+        cfg=cfg, gate_decision=dec,
+    )
+    if not tr.ok:
+        return {"ok": False, "reason": tr.reason}
+    return {
+        "ok": True,
+        "target": "page",
+        "id": page_key,
+        "text": text,
+        "from": dec["from"],
+        "to": tr.to_state,
+        "state": tr.to_state,
+        "note": "已并入常驻活文档",
+    }
 
 
 def _essence(r) -> str:
-    """从笔记里抽出最该进人设的那一句。
-
-    优先 next（给未来的指令），其次 means（推断），最后 what。
-    人设里放的是"我该怎么做"，不是"发生过什么"。
-    """
-    try:
-        meta = json.loads(r["meta_json"] or "{}")
-    except Exception:
-        meta = {}
-    for key in ("next", "means", "noticed", "what"):
-        v = (meta.get(key) or "").strip()
-        if v:
-            return v
-    return (r["text"] or "").strip()
-
-
-def _promotions_in_session(cfg: Config, session_id: str, target_type: str) -> int:
-    with DB.reader(cfg.db_path) as conn:
-        row = conn.execute(
-            """SELECT COUNT(*) c FROM notebook_promotion
-               WHERE session_id=? AND target_type=? AND reverted=0""",
-            (session_id, target_type),
-        ).fetchone()
-    return int(row["c"]) if row else 0
-
-
-def _record(cfg: Config, session_id: str, note_id: str, target_type: str, target_id: str, diff: dict) -> None:
-    now = time.time()
-    with DB.tx(cfg.db_path) as conn:
-        conn.execute(
-            """INSERT INTO notebook_promotion(id,session_id,note_id,target_type,target_id,promoted_at,diff)
-               VALUES(?,?,?,?,?,?,?)""",
-            (
-                "np_" + IDS._digest(note_id, target_id, int(now)),  # noqa: SLF001
-                session_id, note_id, target_type, target_id, now,
-                json.dumps(diff, ensure_ascii=False),
-            ),
-        )
+    """从笔记里抽出最该进人设的那一句（兼容旧接口，口径在 item.promotion_text）。"""
+    return IT.MemoryItem.from_row(r).promotion_text()
 
 
 def _append_to_page(cfg: Config, session_id: str, key: str, text: str) -> None:
@@ -279,37 +283,64 @@ def _append_to_page(cfg: Config, session_id: str, key: str, text: str) -> None:
 
 
 def revert(cfg: Config, promotion_id: str) -> dict:
-    """回滚一次升格。人设条目置 active=0（不删除，撤回本身是历史）。"""
+    """回滚一次升格。人设条目置 active=0（不删除，撤回本身是历史）。
+
+    `promotion_id` 兼容两种：item_state_log.id（新）或 notebook_promotion.id（旧只读记录）。
+    """
     ensure_tables(cfg)
+    log_row = None
+    try:
+        with DB.reader(cfg.db_path) as conn:
+            log_row = conn.execute("SELECT * FROM item_state_log WHERE id=?", (int(promotion_id),)).fetchone()
+    except (TypeError, ValueError):
+        log_row = None
+
+    if log_row is not None:
+        item_id = log_row["item_id"]
+        target_id = log_row["target"] or ""
+        action = log_row["action"]
+        if action == "promote_persona" and target_id:
+            PER.revoke(cfg, target_id)
+        tr = TR.transition(
+            item_id, "revert_promotion", target=str(promotion_id),
+            reason=f"撤回 {action}", actor=IT.ACTOR_SYSTEM, cfg=cfg,
+        )
+        return {"ok": tr.ok, "reverted": promotion_id, "target": target_id, "reason": tr.reason}
+
+    # 旧记录：只读兼容，不更新旧表的 reverted 标记；撤回动作改记进 item_state_log
     with DB.reader(cfg.db_path) as conn:
         r = conn.execute("SELECT * FROM notebook_promotion WHERE id=?", (promotion_id,)).fetchone()
     if r is None:
         return {"ok": False, "reason": "记录不存在"}
     if r["reverted"]:
         return {"ok": False, "reason": "已回滚过"}
-
     if r["target_type"] == "persona":
         PER.revoke(cfg, r["target_id"])
-
-    with DB.tx(cfg.db_path) as conn:
-        conn.execute("UPDATE notebook_promotion SET reverted=1 WHERE id=?", (promotion_id,))
+    TR.transition(
+        r["note_id"], "revert_promotion", target=str(promotion_id),
+        reason=f"撤回旧升格记录 {promotion_id}", actor=IT.ACTOR_SYSTEM, cfg=cfg,
+    )
     return {"ok": True, "reverted": promotion_id, "target": r["target_type"]}
 
 
 # ── 整理 ──────────────────────────────────────────────────────
-def review(cfg: Config, llm, session_id: str, now: float | None = None) -> dict:
-    """整理速记层：能提炼的升级，提炼不出的丢弃。
+_INBOX_WHERE = "(state='inbox' OR (state IS NULL AND tier='inbox'))"
 
-    这是防"笔记层被流水账塞满"的兜底。没有它，写入闸只是把问题延后。
+
+def review(cfg: Config, llm, session_id: str, now: float | None = None) -> dict:
+    """整理速记层：能提炼的升级，提炼不出的归档。
+
+    这是防"笔记层被流水账塞满"的兜底。状态转移全部走 pipeline.transition
+    （旧实现直接 UPDATE archived=1，会绕过状态机与审计）。
     """
     ensure_tables(cfg)
     now = now or time.time()
     with DB.reader(cfg.db_path) as conn:
         rows = conn.execute(
-            """SELECT id, text, meta_json FROM episode
-               WHERE session_id=? AND source='notebook' AND tier='inbox'
-                 AND superseded_by IS NULL AND archived=0
-               ORDER BY t_event DESC LIMIT 100""",
+            f"""SELECT id, text, meta_json FROM episode
+                WHERE session_id=? AND source='notebook' AND {_INBOX_WHERE}
+                  AND superseded_by IS NULL AND archived=0
+                ORDER BY t_event DESC LIMIT 100""",
             (session_id,),
         ).fetchall()
 
@@ -326,37 +357,49 @@ def review(cfg: Config, llm, session_id: str, now: float | None = None) -> dict:
         groups.setdefault(meta.get("topic") or "_", []).append(r)
 
     promoted = dropped = 0
-    with DB.tx(cfg.db_path) as conn:
-        for topic, items in groups.items():
-            if len(items) >= 3:
-                body = "；".join((i["text"] or "")[:60] for i in items[:5])
-                head = items[0]["id"]
-                # 三条以上同主题：合成一条，升级进笔记层
-                merged = f"关于「{topic or '这段时间'}」的几件小事：{body}"
-                conn.execute(
-                    """INSERT OR IGNORE INTO episode
-                       (id,session_id,seq,role,text,t_event,t_ingest,source,tier,memory_type,author,salience,meta_json)
-                       VALUES(?,?,0,'self',?,?,?,'notebook','retrieval','fact','self',0.5,?)""",
-                    (
-                        "ep_merge_" + IDS._digest(head, now), session_id, merged, now, now,  # noqa: SLF001
-                        json.dumps({"merged_from": [i["id"] for i in items], "topic": topic}, ensure_ascii=False),
-                    ),
+    for topic, items in groups.items():
+        if len(items) >= 3:
+            body = "；".join((i["text"] or "")[:60] for i in items[:5])
+            head = items[0]["id"]
+            # 三条以上同主题：合成一条，升级进笔记层（origin=system：系统整流产候选）
+            merged = f"关于「{topic or '这段时间'}」的几件小事：{body}"
+            item = IT.MemoryItem(
+                id="ep_merge_" + IDS._digest(head, int(now)),  # noqa: SLF001
+                session_id=session_id,
+                text=merged,
+                origin=IT.ORIGIN_SYSTEM,
+                actor=IT.ACTOR_SYSTEM,
+                memory_type=PR.T_FACT,
+                segments={},
+                t_event=now,
+                t_ingest=now,
+                role="self",
+                source="notebook",
+                author=PR.A_SELF,
+                meta={"merged_from": [i["id"] for i in items], "topic": topic, "is_merge": True},
+            )
+            sub = TR.submit(item, project=False, cfg=cfg)
+            merged_id = sub.item_id if sub.ok else ""
+            for i in items:
+                TR.transition(
+                    i["id"], "review_archive", target=merged_id,
+                    reason="同主题合并进笔记层", actor=IT.ACTOR_SYSTEM, cfg=cfg,
                 )
-                for i in items:
-                    conn.execute("UPDATE episode SET archived=1 WHERE id=?", (i["id"],))
-                promoted += len(items)
-            else:
-                # 凑不成组的：直接丢。速记是消耗品
-                for i in items:
-                    conn.execute("UPDATE episode SET archived=1 WHERE id=?", (i["id"],))
-                dropped += len(items)
+            promoted += len(items)
+        else:
+            # 凑不成组的：归档（可回溯），不是物理丢弃
+            for i in items:
+                TR.transition(
+                    i["id"], "review_archive", reason="提炼不出，归档", actor=IT.ACTOR_SYSTEM, cfg=cfg,
+                )
+            dropped += len(items)
 
     return {"scanned": len(rows), "promoted": promoted, "dropped": dropped, "groups": len(groups)}
 
 
 def list_notes(cfg: Config, session_id: str, tier: str | None = None, limit: int = 50) -> list[dict]:
     ensure_tables(cfg)
-    sql = """SELECT id, text, tier, salience, emotion, t_event, meta_json, superseded_by
+    sql = """SELECT id, text, tier, state, origin, salience, emotion, t_event, meta_json, superseded_by
              FROM episode WHERE session_id=? AND source='notebook' AND archived=0"""
     args: list = [session_id]
     if tier:
@@ -379,6 +422,8 @@ def list_notes(cfg: Config, session_id: str, tier: str | None = None, limit: int
                 "id": r["id"],
                 "text": r["text"],
                 "tier": r["tier"],
+                "state": r["state"] or IT.compat_state(r["tier"]),
+                "origin": r["origin"] or IT.ORIGIN_TOOL,
                 "salience": round(r["salience"], 3),
                 "emotion": round(r["emotion"] or 0, 3),
                 "superseded": bool(r["superseded_by"]),
@@ -403,15 +448,17 @@ def inbox_status(cfg: Config, session_id: str, now: float | None = None) -> dict
     now = now or time.time()
     with DB.reader(cfg.db_path) as conn:
         row = conn.execute(
-            """SELECT COUNT(*) c, MIN(t_event) oldest FROM episode
-               WHERE session_id=? AND source='notebook' AND tier='inbox'
-                 AND superseded_by IS NULL AND archived=0""",
+            f"""SELECT COUNT(*) c, MIN(t_event) oldest FROM episode
+                WHERE session_id=? AND source='notebook' AND {_INBOX_WHERE}
+                  AND superseded_by IS NULL AND archived=0""",
             (session_id,),
         ).fetchone()
         count = int(row["c"] or 0)
         oldest = row["oldest"]
         last = conn.execute(
-            "SELECT MAX(t_event) t FROM episode WHERE session_id=? AND source='notebook' AND tier='retrieval'",
+            """SELECT MAX(t_event) t FROM episode
+               WHERE session_id=? AND source='notebook'
+                 AND (state IN ('note','resident','important') OR (state IS NULL AND tier!='inbox'))""",
             (session_id,),
         ).fetchone()
     age_h = (now - oldest) / 3600 if oldest else 0.0

@@ -12,8 +12,8 @@ from dataclasses import dataclass, field
 
 from ..config import Config
 from . import db as DB
+from . import field as FD
 from . import ids as IDS
-from . import memory_field as MF
 from . import score as SC
 from . import text as TX
 from . import timeparse
@@ -200,86 +200,90 @@ def recall(
     return res
 
 
-def _adjacency(cfg: Config, sid: str) -> dict[str, list[tuple[str, float]]]:
-    """从超边成员构建邻接表（只连 fact 与 episode）。
-
-    连续场的拉普拉斯算子在图上就是"邻居"。这里用超边做超边内两两连接，
-    权重随超边大小衰减——一个 50 人的大主题里，任意两条的关联本来就不强。
-    """
-    adj: dict[str, list[tuple[str, float]]] = {}
-    try:
-        with DB.reader(cfg.db_path) as conn:
-            edges = conn.execute(
-                """SELECT edge_id FROM hyperedge
-                   WHERE (?='*' OR session_id=?) AND member_count BETWEEN 2 AND 30
-                   ORDER BY member_count DESC LIMIT 200""",
-                (sid, sid),
-            ).fetchall()
-            for e in edges:
-                members = conn.execute(
-                    """SELECT member_type, member_id FROM hyperedge_member
-                       WHERE edge_id=? AND member_type IN ('fact','episode') LIMIT 30""",
-                    (e["edge_id"],),
-                ).fetchall()
-                if len(members) < 2:
-                    continue
-                w = round(0.85 / max(1, len(members) - 1), 3)
-                keys = [f"{m['member_type']}:{m['member_id']}" for m in members]
-                for i, a in enumerate(keys):
-                    for b in keys[i + 1 :]:
-                        adj.setdefault(a, []).append((b, w))
-                        adj.setdefault(b, []).append((a, w))
-    except Exception as e:
-        log.debug("adjacency failed: %s", e)
-    return adj
-
-
-def _expand_by_field(
+def _field_route(
     cfg: Config,
+    embedder: Embedder,
+    query: str,
     sid: str,
-    cands: list[SC.Candidate],
-    seen: dict,
     as_of: float,
     plan: dict,
-) -> list[SC.Candidate]:
-    """图扩散：命中节点把激活沿结构传给邻居。
+    depth: dict,
+    dense_ids: list[str],
+    sparse_ids: list[str],
+) -> tuple[list[str], FD.PhiMap | None]:
+    """语义场一路：点火 + 稀疏扩散 → 候选 node key。
 
-    这一步补的是向量检索的结构性缺陷——它只在查询那一刻建立相似,
-    而扩散走的是**已经存在的结构关联**。命中了"团子"的记忆，
-    会顺带把同属"养狗"主题的其他片段也拉起来。
+    与 dense/sparse/graph 并列参与 RRF 融合。场只决定"从哪里点亮、点亮了
+    哪些邻居"，排序仍由 docs/03 §4.3 的分项决定。`ALAYA_FIELD=0` 时整路关闭，
+    plan_json 里会留下 field_enabled=false 的证据。
     """
-    adj = _adjacency(cfg, sid)
-    if not adj:
-        return cands
-    seeds = {f"{c.kind}:{c.ref_id}": max(0.15, min(1.0, c.rel)) for c in cands if c.rel > 0.2}
-    if not seeds:
-        return cands
+    if not FD.enabled():
+        plan.update(
+            {"field_enabled": False, "seeds": 0, "iterations": 0, "edge_types": [], "phi_top": []}
+        )
+        return [], None
 
-    hops = int(plan.get("_hops", 2))
-    act = MF.spread(seeds, adj, gamma=MF.DEFAULT_GAMMA, hops=hops, floor=0.06)
-    extra = 0
-    for nid, a in act.items():
-        if nid in seeds:
+    hops = int(depth.get("hops") or 0)
+    try:
+        seeds = FD.seed_nodes(
+            query,
+            sid,
+            k_vec=int(depth.get("dense") or 0),
+            k_fts=int(depth.get("sparse") or 0),
+            cfg=cfg,
+            embedder=embedder,
+            as_of=as_of,
+            # dense/sparse 已经算过，直接复用为点火结果，避免重复扫库。
+            routes={"vec": dense_ids, "fts": sparse_ids},
+        )
+    except Exception as e:  # 场点火失败不该拖垮其余三路
+        log.debug("field ignition failed: %s", e)
+        seeds = []
+
+    plan["field_enabled"] = True
+    plan["seeds"] = len(seeds)
+    plan["seed_top"] = [s.key for s in seeds[:8]]
+    if not seeds:
+        plan.update({"iterations": 0, "edge_types": [], "phi_top": []})
+        return [], None
+
+    # instant 档（hops=0）只点火不扩散；其余档最多 3 轮，由 field 硬上限兜底。
+    iterations = max(1, min(hops, FD.MAX_ITERATIONS)) if hops > 0 else 0
+    try:
+        phi = FD.propagate(seeds, sid, iterations=iterations, cfg=cfg, as_of=as_of)
+    except Exception as e:
+        log.debug("field propagation failed: %s", e)
+        phi = FD.PhiMap({s.key: s.score for s in seeds}, seed_count=len(seeds))
+
+    plan["iterations"] = phi.iterations
+    plan["edge_types"] = list(phi.edge_types)
+    order = sorted(phi.items(), key=lambda kv: (-kv[1], kv[0]))
+    plan["phi_top"] = [[k, round(float(v), 4)] for k, v in order[:10]]
+    # entity 只是扩散的中间节点，不直接成条；fact/episode 才交回候选生成。
+    ids = [k for k, _v in order if k.split(":", 1)[0] in ("fact", "episode")]
+    cap = max(12, int(depth.get("dense") or 12))
+    return ids[:cap], phi
+
+
+def _apply_field(seen: dict, phi: FD.PhiMap | None) -> None:
+    """把扩散激活折算成 graph_prox：1/(1+跳数) × 相对激活。
+
+    只对**扩散出来的**节点（dist≥1）生效：种子是 query 的直接命中，不借
+    场的名义再抬一次分；这样"想起 A 就顺带想起 B"里的 B 才有排名收益。
+    """
+    if not phi:
+        return
+    top = max((v for v in phi.values() if v > 0), default=0.0)
+    for key, val in phi.items():
+        dist = phi.dist.get(key, 0)
+        if dist <= 0:
             continue
-        try:
-            kind, real = nid.split(":", 1)
-        except ValueError:
+        kind, _sep, real = key.partition(":")
+        c = seen.get(real)
+        if c is None or kind not in ("fact", "episode"):
             continue
-        if kind not in ("fact", "episode") or real in seen:
-            continue
-        if extra >= 12:  # 扩散补进来的条目上限，防止一次检索被撑爆
-            break
-        c = _load_candidate(cfg, kind, real, sid, as_of, plan)
-        if c is None:
-            continue
-        c.rel = max(c.rel, min(0.9, a * 0.9))
-        c.graph_prox = max(c.graph_prox, a)
-        seen[real] = c
-        cands.append(c)
-        extra += 1
-    if extra:
-        log.debug("field expanded %d candidates", extra)
-    return cands
+        rel_act = min(1.0, float(val) / top) if top > 0 else 0.0
+        c.graph_prox = max(c.graph_prox, rel_act / (1.0 + dist))
 
 
 # ── 阶段 1：理解问题 ──────────────────────────────────────────
@@ -342,7 +346,11 @@ def _gather(
     sparse_ids = _sparse(cfg, query, sid, as_of, depth["sparse"])
     graph_ids = _graph(cfg, plan, sid, as_of, depth["graph"])
 
-    fused = V.rrf_fuse([dense_ids, sparse_ids, graph_ids], k=60.0)
+    # 第四路：语义场（点火 + 扩散）。dense/sparse 的结果直接复用为前两路种子，
+    # 避免同一查询把向量表扫两遍；场里新增的只有实体命中和扩散出来的邻居。
+    field_ids, phi = _field_route(cfg, embedder, query, sid, as_of, plan, depth, dense_ids, sparse_ids)
+
+    fused = V.rrf_fuse([dense_ids, sparse_ids, graph_ids, field_ids], k=60.0)
     # 直接用 RRF 分作为"被多路共同命中"的证据，稍后与向量余弦合成 rel
     dense_rank = {rid: i for i, rid in enumerate(dense_ids)}
 
@@ -363,11 +371,9 @@ def _gather(
     if dense_ids:
         _refine_cosine(cfg, embedder, query, seen, dense_ids)
 
-    # 图扩散：把结构上相邻的记忆也拉进候选
-    plan["_hops"] = depth["hops"]
-    if depth["hops"] <= 0:
-        return list(seen.values())
-    return _expand_by_field(cfg, sid, list(seen.values()), seen, as_of, plan)
+    # 场扩散出来的邻居折算成 graph_prox（种子本身不重复抬分）
+    _apply_field(seen, phi)
+    return list(seen.values())
 
 
 def _collect_states(cfg: Config, sid: str, as_of: float, seen: dict, plan: dict) -> None:
@@ -489,20 +495,25 @@ def _sparse(cfg: Config, query: str, sid: str, as_of: float, k: int | None = Non
         return []
     out: list[str] = []
     with DB.reader(cfg.db_path) as conn:
-        for fts, kind, table in (("fact_fts", "fact", "fact"), ("episode_fts", "episode", "episode")):
+        # 两张 FTS 的过滤条件不同：fact 没有 source 列，episode 才要排掉做梦稿。
+        # 之前两张表共用一句 `t.source!='dream'`，fact 路一直在静默报错，等于少一路。
+        for fts, kind, table, idcol, extra in (
+            ("fact_fts", "fact", "fact", "fact_id", "t.status!='invalidated'"),
+            ("episode_fts", "episode", "episode", "episode_id", "t.archived=0 AND t.source!='dream'"),
+        ):
             try:
                 rows = conn.execute(
-                    f"""SELECT f.rowid, t.id FROM {fts} f
-                        JOIN {table} t ON t.id = f.{'fact_id' if kind=='fact' else 'episode_id'}
+                    f"""SELECT t.id AS rid FROM {fts} f
+                        JOIN {table} t ON t.id = f.{idcol}
                         WHERE {fts} MATCH ? AND (?='*' OR t.session_id=?) AND t.t_ingest <= ?
-                          AND t.source!='dream'
+                          AND {extra}
                         ORDER BY rank LIMIT ?""",
                     (fq, sid, sid, as_of, k),
                 ).fetchall()
             except Exception as e:  # FTS 语法异常不该拖垮检索
                 log.debug("fts failed %s: %s", fts, e)
                 continue
-            out.extend(f"{kind}:{r['id']}" for r in rows)
+            out.extend(f"{kind}:{r['rid']}" for r in rows)
     return list(dict.fromkeys(out))
 
 

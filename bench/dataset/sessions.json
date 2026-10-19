@@ -1,0 +1,1047 @@
+{
+  "s01": {
+    "expected_active_facts": [
+      {
+        "object": "狗",
+        "polarity": 1,
+        "predicate": "是",
+        "subject": "团子"
+      },
+      {
+        "object": "天津",
+        "polarity": 1,
+        "predicate": "住在",
+        "subject": "我"
+      },
+      {
+        "object": "许嘉",
+        "polarity": 1,
+        "predicate": "关系是",
+        "subject": "我"
+      },
+      {
+        "object": "桂林",
+        "polarity": 1,
+        "predicate": "去过",
+        "subject": "我"
+      },
+      {
+        "object": "晓星",
+        "polarity": 1,
+        "predicate": "叫",
+        "subject": "我"
+      },
+      {
+        "object": "小笼包",
+        "polarity": 1,
+        "predicate": "喜欢",
+        "subject": "我"
+      },
+      {
+        "object": "打羽毛球",
+        "polarity": 1,
+        "predicate": "喜欢",
+        "subject": "我"
+      },
+      {
+        "object": "榴莲",
+        "polarity": -1,
+        "predicate": "喜欢",
+        "subject": "我"
+      },
+      {
+        "object": "螺蛳粉",
+        "polarity": 1,
+        "predicate": "喜欢",
+        "subject": "我"
+      },
+      {
+        "object": "香菜",
+        "polarity": 1,
+        "predicate": "喜欢",
+        "subject": "我"
+      },
+      {
+        "object": "体检",
+        "polarity": 1,
+        "predicate": "害怕",
+        "subject": "我"
+      },
+      {
+        "object": "小米",
+        "polarity": 1,
+        "predicate": "工作在",
+        "subject": "我"
+      },
+      {
+        "object": "团子",
+        "polarity": 1,
+        "predicate": "有",
+        "subject": "我"
+      },
+      {
+        "object": "辞职去做独立开发",
+        "polarity": 1,
+        "predicate": "计划",
+        "subject": "我"
+      },
+      {
+        "object": "林知",
+        "polarity": 1,
+        "predicate": "认识",
+        "subject": "我"
+      },
+      {
+        "object": "苏禾",
+        "polarity": 1,
+        "predicate": "认识",
+        "subject": "我"
+      },
+      {
+        "object": "内脏",
+        "polarity": 1,
+        "predicate": "讨厌",
+        "subject": "我"
+      },
+      {
+        "object": "中兴",
+        "polarity": 1,
+        "predicate": "工作在",
+        "subject": "林知"
+      },
+      {
+        "object": "昆明",
+        "polarity": 1,
+        "predicate": "住在",
+        "subject": "苏禾"
+      },
+      {
+        "object": "百度",
+        "polarity": 1,
+        "predicate": "工作在",
+        "subject": "许嘉"
+      }
+    ],
+    "expected_state_now": {
+      "city": "天津",
+      "job": "小米",
+      "relationship": "许嘉"
+    },
+    "facts": {
+      "city": [
+        "哈尔滨",
+        "苏州",
+        "天津"
+      ],
+      "friend": {
+        "company": "中兴",
+        "name": "林知"
+      },
+      "girlfriend": {
+        "company": "百度",
+        "name": "许嘉"
+      },
+      "job": [
+        "蔚来",
+        "联想",
+        "小米"
+      ],
+      "pet": {
+        "city": "苏州",
+        "name": "团子",
+        "species": "狗"
+      },
+      "plan": "辞职去做独立开发",
+      "preferences": {
+        "fear": "体检",
+        "hate1": "内脏",
+        "hate2": "榴莲",
+        "hobby": "打羽毛球",
+        "like1": "螺蛳粉",
+        "like2": "小笼包",
+        "reversal_object": "香菜"
+      },
+      "roommate": {
+        "city": "昆明",
+        "name": "苏禾"
+      },
+      "travel_place": "桂林"
+    },
+    "hometown": "哈尔滨",
+    "role": "后端开发",
+    "session_id": "s01",
+    "timeline": {
+      "city": [
+        {
+          "t": 1767610800.0,
+          "value": "哈尔滨"
+        },
+        {
+          "t": 1771239600.0,
+          "value": "苏州"
+        },
+        {
+          "t": 1777287600.0,
+          "value": "天津"
+        }
+      ],
+      "job": [
+        {
+          "t": 1767610800.0,
+          "value": "蔚来"
+        },
+        {
+          "t": 1772622000.0,
+          "value": "联想"
+        },
+        {
+          "t": 1778583600.0,
+          "value": "小米"
+        }
+      ],
+      "relationship": [
+        {
+          "t": 1770462000.0,
+          "value": "许嘉"
+        }
+      ]
+    },
+    "user_name": "晓星"
+  },
+  "s02": {
+    "expected_active_facts": [
+      {
+        "object": "大疆",
+        "polarity": 1,
+        "predicate": "工作在",
+        "subject": "唐棠"
+      },
+      {
+        "object": "猫",
+        "polarity": 1,
+        "predicate": "是",
+        "subject": "年糕"
+      },
+      {
+        "object": "西安",
+        "polarity": 1,
+        "predicate": "住在",
+        "subject": "我"
+      },
+      {
+        "object": "唐棠",
+        "polarity": 1,
+        "predicate": "关系是",
+        "subject": "我"
+      },
+      {
+        "object": "泉州",
+        "polarity": 1,
+        "predicate": "去过",
+        "subject": "我"
+      },
+      {
+        "object": "沈禾",
+        "polarity": 1,
+        "predicate": "叫",
+        "subject": "我"
+      },
+      {
+        "object": "咖啡",
+        "polarity": 1,
+        "predicate": "喜欢",
+        "subject": "我"
+      },
+      {
+        "object": "姜",
+        "polarity": -1,
+        "predicate": "喜欢",
+        "subject": "我"
+      },
+      {
+        "object": "小笼包",
+        "polarity": 1,
+        "predicate": "喜欢",
+        "subject": "我"
+      },
+      {
+        "object": "爬山",
+        "polarity": 1,
+        "predicate": "喜欢",
+        "subject": "我"
+      },
+      {
+        "object": "香菜",
+        "polarity": 1,
+        "predicate": "喜欢",
+        "subject": "我"
+      },
+      {
+        "object": "打雷",
+        "polarity": 1,
+        "predicate": "害怕",
+        "subject": "我"
+      },
+      {
+        "object": "快手",
+        "polarity": 1,
+        "predicate": "工作在",
+        "subject": "我"
+      },
+      {
+        "object": "年糕",
+        "polarity": 1,
+        "predicate": "有",
+        "subject": "我"
+      },
+      {
+        "object": "考一个潜水证",
+        "polarity": 1,
+        "predicate": "计划",
+        "subject": "我"
+      },
+      {
+        "object": "江眠",
+        "polarity": 1,
+        "predicate": "认识",
+        "subject": "我"
+      },
+      {
+        "object": "苏禾",
+        "polarity": 1,
+        "predicate": "认识",
+        "subject": "我"
+      },
+      {
+        "object": "肥肉",
+        "polarity": 1,
+        "predicate": "讨厌",
+        "subject": "我"
+      },
+      {
+        "object": "华为",
+        "polarity": 1,
+        "predicate": "工作在",
+        "subject": "江眠"
+      },
+      {
+        "object": "重庆",
+        "polarity": 1,
+        "predicate": "住在",
+        "subject": "苏禾"
+      }
+    ],
+    "expected_state_now": {
+      "city": "西安",
+      "job": "快手",
+      "relationship": "唐棠"
+    },
+    "facts": {
+      "city": [
+        "洛阳",
+        "武汉",
+        "西安"
+      ],
+      "friend": {
+        "company": "华为",
+        "name": "江眠"
+      },
+      "girlfriend": {
+        "company": "大疆",
+        "name": "唐棠"
+      },
+      "job": [
+        "美团",
+        "京东",
+        "快手"
+      ],
+      "pet": {
+        "city": "武汉",
+        "name": "年糕",
+        "species": "猫"
+      },
+      "plan": "考一个潜水证",
+      "preferences": {
+        "fear": "打雷",
+        "hate1": "肥肉",
+        "hate2": "姜",
+        "hobby": "爬山",
+        "like1": "咖啡",
+        "like2": "小笼包",
+        "reversal_object": "香菜"
+      },
+      "roommate": {
+        "city": "重庆",
+        "name": "苏禾"
+      },
+      "travel_place": "泉州"
+    },
+    "hometown": "洛阳",
+    "role": "前端开发",
+    "session_id": "s02",
+    "timeline": {
+      "city": [
+        {
+          "t": 1767610800.0,
+          "value": "洛阳"
+        },
+        {
+          "t": 1771239600.0,
+          "value": "武汉"
+        },
+        {
+          "t": 1777287600.0,
+          "value": "西安"
+        }
+      ],
+      "job": [
+        {
+          "t": 1767610800.0,
+          "value": "美团"
+        },
+        {
+          "t": 1772622000.0,
+          "value": "京东"
+        },
+        {
+          "t": 1778583600.0,
+          "value": "快手"
+        }
+      ],
+      "relationship": [
+        {
+          "t": 1770462000.0,
+          "value": "唐棠"
+        }
+      ]
+    },
+    "user_name": "沈禾"
+  },
+  "s03": {
+    "expected_active_facts": [
+      {
+        "object": "狗",
+        "polarity": 1,
+        "predicate": "是",
+        "subject": "可乐"
+      },
+      {
+        "object": "大疆",
+        "polarity": 1,
+        "predicate": "工作在",
+        "subject": "唐棠"
+      },
+      {
+        "object": "杭州",
+        "polarity": 1,
+        "predicate": "住在",
+        "subject": "我"
+      },
+      {
+        "object": "江眠",
+        "polarity": 1,
+        "predicate": "关系是",
+        "subject": "我"
+      },
+      {
+        "object": "敦煌",
+        "polarity": 1,
+        "predicate": "去过",
+        "subject": "我"
+      },
+      {
+        "object": "陆川",
+        "polarity": 1,
+        "predicate": "叫",
+        "subject": "我"
+      },
+      {
+        "object": "抹茶",
+        "polarity": 1,
+        "predicate": "喜欢",
+        "subject": "我"
+      },
+      {
+        "object": "游泳",
+        "polarity": 1,
+        "predicate": "喜欢",
+        "subject": "我"
+      },
+      {
+        "object": "烧烤",
+        "polarity": 1,
+        "predicate": "喜欢",
+        "subject": "我"
+      },
+      {
+        "object": "韭菜",
+        "polarity": -1,
+        "predicate": "喜欢",
+        "subject": "我"
+      },
+      {
+        "object": "香菜",
+        "polarity": 1,
+        "predicate": "喜欢",
+        "subject": "我"
+      },
+      {
+        "object": "蟑螂",
+        "polarity": 1,
+        "predicate": "害怕",
+        "subject": "我"
+      },
+      {
+        "object": "蚂蚁集团",
+        "polarity": 1,
+        "predicate": "工作在",
+        "subject": "我"
+      },
+      {
+        "object": "可乐",
+        "polarity": 1,
+        "predicate": "有",
+        "subject": "我"
+      },
+      {
+        "object": "攒钱买一台相机",
+        "polarity": 1,
+        "predicate": "计划",
+        "subject": "我"
+      },
+      {
+        "object": "唐棠",
+        "polarity": 1,
+        "predicate": "认识",
+        "subject": "我"
+      },
+      {
+        "object": "顾言",
+        "polarity": 1,
+        "predicate": "认识",
+        "subject": "我"
+      },
+      {
+        "object": "肥肉",
+        "polarity": 1,
+        "predicate": "讨厌",
+        "subject": "我"
+      },
+      {
+        "object": "中兴",
+        "polarity": 1,
+        "predicate": "工作在",
+        "subject": "江眠"
+      },
+      {
+        "object": "重庆",
+        "polarity": 1,
+        "predicate": "住在",
+        "subject": "顾言"
+      }
+    ],
+    "expected_state_now": {
+      "city": "杭州",
+      "job": "蚂蚁集团",
+      "relationship": "江眠"
+    },
+    "facts": {
+      "city": [
+        "昆明",
+        "西安",
+        "杭州"
+      ],
+      "friend": {
+        "company": "大疆",
+        "name": "唐棠"
+      },
+      "girlfriend": {
+        "company": "中兴",
+        "name": "江眠"
+      },
+      "job": [
+        "字节跳动",
+        "联想",
+        "蚂蚁集团"
+      ],
+      "pet": {
+        "city": "西安",
+        "name": "可乐",
+        "species": "狗"
+      },
+      "plan": "攒钱买一台相机",
+      "preferences": {
+        "fear": "蟑螂",
+        "hate1": "肥肉",
+        "hate2": "韭菜",
+        "hobby": "游泳",
+        "like1": "烧烤",
+        "like2": "抹茶",
+        "reversal_object": "香菜"
+      },
+      "roommate": {
+        "city": "重庆",
+        "name": "顾言"
+      },
+      "travel_place": "敦煌"
+    },
+    "hometown": "昆明",
+    "role": "数据分析",
+    "session_id": "s03",
+    "timeline": {
+      "city": [
+        {
+          "t": 1767610800.0,
+          "value": "昆明"
+        },
+        {
+          "t": 1771239600.0,
+          "value": "西安"
+        },
+        {
+          "t": 1777287600.0,
+          "value": "杭州"
+        }
+      ],
+      "job": [
+        {
+          "t": 1767610800.0,
+          "value": "字节跳动"
+        },
+        {
+          "t": 1772622000.0,
+          "value": "联想"
+        },
+        {
+          "t": 1778583600.0,
+          "value": "蚂蚁集团"
+        }
+      ],
+      "relationship": [
+        {
+          "t": 1770462000.0,
+          "value": "江眠"
+        }
+      ]
+    },
+    "user_name": "陆川"
+  },
+  "s04": {
+    "expected_active_facts": [
+      {
+        "object": "腾讯",
+        "polarity": 1,
+        "predicate": "工作在",
+        "subject": "何川"
+      },
+      {
+        "object": "长沙",
+        "polarity": 1,
+        "predicate": "住在",
+        "subject": "我"
+      },
+      {
+        "object": "顾言",
+        "polarity": 1,
+        "predicate": "关系是",
+        "subject": "我"
+      },
+      {
+        "object": "厦门",
+        "polarity": 1,
+        "predicate": "去过",
+        "subject": "我"
+      },
+      {
+        "object": "林晚",
+        "polarity": 1,
+        "predicate": "叫",
+        "subject": "我"
+      },
+      {
+        "object": "烧烤",
+        "polarity": 1,
+        "predicate": "喜欢",
+        "subject": "我"
+      },
+      {
+        "object": "看展",
+        "polarity": 1,
+        "predicate": "喜欢",
+        "subject": "我"
+      },
+      {
+        "object": "苦瓜",
+        "polarity": -1,
+        "predicate": "喜欢",
+        "subject": "我"
+      },
+      {
+        "object": "螺蛳粉",
+        "polarity": 1,
+        "predicate": "喜欢",
+        "subject": "我"
+      },
+      {
+        "object": "香菜",
+        "polarity": 1,
+        "predicate": "喜欢",
+        "subject": "我"
+      },
+      {
+        "object": "打雷",
+        "polarity": 1,
+        "predicate": "害怕",
+        "subject": "我"
+      },
+      {
+        "object": "网易",
+        "polarity": 1,
+        "predicate": "工作在",
+        "subject": "我"
+      },
+      {
+        "object": "汤圆",
+        "polarity": 1,
+        "predicate": "有",
+        "subject": "我"
+      },
+      {
+        "object": "换一个更大的房子",
+        "polarity": 1,
+        "predicate": "计划",
+        "subject": "我"
+      },
+      {
+        "object": "何川",
+        "polarity": 1,
+        "predicate": "认识",
+        "subject": "我"
+      },
+      {
+        "object": "林知",
+        "polarity": 1,
+        "predicate": "认识",
+        "subject": "我"
+      },
+      {
+        "object": "肥肉",
+        "polarity": 1,
+        "predicate": "讨厌",
+        "subject": "我"
+      },
+      {
+        "object": "长沙",
+        "polarity": 1,
+        "predicate": "住在",
+        "subject": "林知"
+      },
+      {
+        "object": "猫",
+        "polarity": 1,
+        "predicate": "是",
+        "subject": "汤圆"
+      },
+      {
+        "object": "华为",
+        "polarity": 1,
+        "predicate": "工作在",
+        "subject": "顾言"
+      }
+    ],
+    "expected_state_now": {
+      "city": "长沙",
+      "job": "网易",
+      "relationship": "顾言"
+    },
+    "facts": {
+      "city": [
+        "青岛",
+        "宁波",
+        "长沙"
+      ],
+      "friend": {
+        "company": "腾讯",
+        "name": "何川"
+      },
+      "girlfriend": {
+        "company": "华为",
+        "name": "顾言"
+      },
+      "job": [
+        "京东",
+        "蔚来",
+        "网易"
+      ],
+      "pet": {
+        "city": "宁波",
+        "name": "汤圆",
+        "species": "猫"
+      },
+      "plan": "换一个更大的房子",
+      "preferences": {
+        "fear": "打雷",
+        "hate1": "肥肉",
+        "hate2": "苦瓜",
+        "hobby": "看展",
+        "like1": "烧烤",
+        "like2": "螺蛳粉",
+        "reversal_object": "香菜"
+      },
+      "roommate": {
+        "city": "长沙",
+        "name": "林知"
+      },
+      "travel_place": "厦门"
+    },
+    "hometown": "青岛",
+    "role": "产品经理",
+    "session_id": "s04",
+    "timeline": {
+      "city": [
+        {
+          "t": 1767610800.0,
+          "value": "青岛"
+        },
+        {
+          "t": 1771239600.0,
+          "value": "宁波"
+        },
+        {
+          "t": 1777287600.0,
+          "value": "长沙"
+        }
+      ],
+      "job": [
+        {
+          "t": 1767610800.0,
+          "value": "京东"
+        },
+        {
+          "t": 1772622000.0,
+          "value": "蔚来"
+        },
+        {
+          "t": 1778583600.0,
+          "value": "网易"
+        }
+      ],
+      "relationship": [
+        {
+          "t": 1770462000.0,
+          "value": "顾言"
+        }
+      ]
+    },
+    "user_name": "林晚"
+  },
+  "s05": {
+    "expected_active_facts": [
+      {
+        "object": "华为",
+        "polarity": 1,
+        "predicate": "工作在",
+        "subject": "何川"
+      },
+      {
+        "object": "天津",
+        "polarity": 1,
+        "predicate": "住在",
+        "subject": "我"
+      },
+      {
+        "object": "何川",
+        "polarity": 1,
+        "predicate": "关系是",
+        "subject": "我"
+      },
+      {
+        "object": "桂林",
+        "polarity": 1,
+        "predicate": "去过",
+        "subject": "我"
+      },
+      {
+        "object": "周野",
+        "polarity": 1,
+        "predicate": "叫",
+        "subject": "我"
+      },
+      {
+        "object": "咖啡",
+        "polarity": 1,
+        "predicate": "喜欢",
+        "subject": "我"
+      },
+      {
+        "object": "生煎",
+        "polarity": 1,
+        "predicate": "喜欢",
+        "subject": "我"
+      },
+      {
+        "object": "苦瓜",
+        "polarity": -1,
+        "predicate": "喜欢",
+        "subject": "我"
+      },
+      {
+        "object": "跑步",
+        "polarity": 1,
+        "predicate": "喜欢",
+        "subject": "我"
+      },
+      {
+        "object": "香菜",
+        "polarity": 1,
+        "predicate": "喜欢",
+        "subject": "我"
+      },
+      {
+        "object": "人群",
+        "polarity": 1,
+        "predicate": "害怕",
+        "subject": "我"
+      },
+      {
+        "object": "蔚来",
+        "polarity": 1,
+        "predicate": "工作在",
+        "subject": "我"
+      },
+      {
+        "object": "麦麦",
+        "polarity": 1,
+        "predicate": "有",
+        "subject": "我"
+      },
+      {
+        "object": "考一个潜水证",
+        "polarity": 1,
+        "predicate": "计划",
+        "subject": "我"
+      },
+      {
+        "object": "江眠",
+        "polarity": 1,
+        "predicate": "认识",
+        "subject": "我"
+      },
+      {
+        "object": "赵屿",
+        "polarity": 1,
+        "predicate": "认识",
+        "subject": "我"
+      },
+      {
+        "object": "皮蛋",
+        "polarity": 1,
+        "predicate": "讨厌",
+        "subject": "我"
+      },
+      {
+        "object": "苏州",
+        "polarity": 1,
+        "predicate": "住在",
+        "subject": "江眠"
+      },
+      {
+        "object": "滴滴",
+        "polarity": 1,
+        "predicate": "工作在",
+        "subject": "赵屿"
+      },
+      {
+        "object": "狗",
+        "polarity": 1,
+        "predicate": "是",
+        "subject": "麦麦"
+      }
+    ],
+    "expected_state_now": {
+      "city": "天津",
+      "job": "蔚来",
+      "relationship": "何川"
+    },
+    "facts": {
+      "city": [
+        "合肥",
+        "宁波",
+        "天津"
+      ],
+      "friend": {
+        "company": "滴滴",
+        "name": "赵屿"
+      },
+      "girlfriend": {
+        "company": "华为",
+        "name": "何川"
+      },
+      "job": [
+        "蚂蚁集团",
+        "联想",
+        "蔚来"
+      ],
+      "pet": {
+        "city": "宁波",
+        "name": "麦麦",
+        "species": "狗"
+      },
+      "plan": "考一个潜水证",
+      "preferences": {
+        "fear": "人群",
+        "hate1": "皮蛋",
+        "hate2": "苦瓜",
+        "hobby": "跑步",
+        "like1": "咖啡",
+        "like2": "生煎",
+        "reversal_object": "香菜"
+      },
+      "roommate": {
+        "city": "苏州",
+        "name": "江眠"
+      },
+      "travel_place": "桂林"
+    },
+    "hometown": "合肥",
+    "role": "测试开发",
+    "session_id": "s05",
+    "timeline": {
+      "city": [
+        {
+          "t": 1767610800.0,
+          "value": "合肥"
+        },
+        {
+          "t": 1771239600.0,
+          "value": "宁波"
+        },
+        {
+          "t": 1777287600.0,
+          "value": "天津"
+        }
+      ],
+      "job": [
+        {
+          "t": 1767610800.0,
+          "value": "蚂蚁集团"
+        },
+        {
+          "t": 1772622000.0,
+          "value": "联想"
+        },
+        {
+          "t": 1778583600.0,
+          "value": "蔚来"
+        }
+      ],
+      "relationship": [
+        {
+          "t": 1770462000.0,
+          "value": "何川"
+        }
+      ]
+    },
+    "user_name": "周野"
+  }
+}

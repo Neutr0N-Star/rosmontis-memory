@@ -13,11 +13,13 @@ from . import audit as AUD
 from . import db as DB
 from . import forget as FG
 from . import ids as IDS
+from . import item as IT
 from . import notebook as NB
 from . import context as CTX
 from . import dream as DM
 from . import persona as PER
 from . import pages as PAG
+from . import pipeline as TR
 from . import promotion as PR
 from . import score as SC
 from . import recall as RC
@@ -66,6 +68,8 @@ class Memory:
             openai_key=self.cfg.openai_key,
             openai_model=self.cfg.openai_model,
         )
+        # 统一写入管线的进程内上下文：契约签名不带 cfg，由门面绑定
+        TR.bind(self.cfg, self.embedder, self.llm_hot)
 
     # ── 写 ────────────────────────────────────────────────
     def ingest(
@@ -120,24 +124,18 @@ class Memory:
         return d
 
     def _enqueue(self, episode_id: str) -> None:
-        from concurrent.futures import ThreadPoolExecutor
-
-        if not hasattr(self, "_pool"):
-            self._pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="alaya-enrich")
-        self._pool.submit(self._run_enrich, episode_id)
+        """后台结构投影。池在 pipeline 里（主动/被动共用同一异步通道）。"""
+        TR.enqueue_enrich(episode_id, cfg=self.cfg, embedder=self.embedder, llm=self.llm_hot)
 
     def _run_enrich(self, episode_id: str) -> None:
         try:
-            WR.enrich(self.cfg, self.llm_hot, episode_id, embedder=self.embedder)
+            TR.enrich(episode_id, cfg=self.cfg, embedder=self.embedder, llm=self.llm_hot)
         except Exception as e:  # pragma: no cover
             log.debug("enrich failed for %s: %s", episode_id, e)
 
     def wait_enrich(self, timeout: float = 60.0) -> None:
         """测试与批处理用：等后台抽取跑完。"""
-        pool = getattr(self, "_pool", None)
-        if pool is not None:
-            pool.shutdown(wait=True, cancel_futures=False)
-            self._pool = None
+        TR.wait_enrich(timeout=timeout)
 
     def ingest_batch(self, items: list[dict], session_id: str = "default") -> dict:
         results = []
@@ -345,6 +343,15 @@ class Memory:
         """
         counts = {}
         with DB.tx(self.cfg.db_path) as conn:
+            # 审计表没有 session_id，先按 episode 归属清掉，避免删库后留孤儿日志
+            try:
+                cur = conn.execute(
+                    "DELETE FROM item_state_log WHERE item_id IN (SELECT id FROM episode WHERE session_id=?)",
+                    (session_id,),
+                )
+                counts["item_state_log"] = cur.rowcount
+            except Exception:
+                pass
             for t in self._WIPE_TABLES:
                 try:
                     col = "episode_id" if t == "episode_fts" else "session_id"
@@ -400,7 +407,7 @@ class Memory:
         with DB.reader(self.cfg.db_path) as conn:
             total = conn.execute(f"SELECT COUNT(*) c FROM episode WHERE {where}", (session_id, session_id)).fetchone()["c"]
             rows = conn.execute(
-                f"""SELECT id, role, text, t_event, t_ingest, source, tier, memory_type,
+                f"""SELECT id, role, text, t_event, t_ingest, source, tier, state, origin, memory_type,
                            author, salience, emotion, access_count, archived, muted,
                            folded_into, superseded_by, correction_of, cooldown_until
                     FROM episode WHERE {where}
@@ -417,6 +424,8 @@ class Memory:
                     "t_event": r["t_event"],
                     "source": r["source"],
                     "tier": r["tier"],
+                    "state": r["state"] or IT.compat_state(r["tier"], r["archived"], r["muted"]),
+                    "origin": r["origin"] or IT.ORIGIN_INGEST,
                     "memory_type": r["memory_type"],
                     "author": r["author"],
                     "salience": round(r["salience"], 3),
@@ -432,6 +441,30 @@ class Memory:
                 for r in rows
             ],
         }
+
+    # ── 生命周期（状态机对外入口，供 API/测试用）──────────────
+    def item_state(self, item_id: str) -> str:
+        """读当前状态；旧库未回填时按 tier/archived/muted 兼容投影。"""
+        try:
+            return TR.state_of(item_id, cfg=self.cfg)
+        except Exception:
+            with DB.reader(self.cfg.db_path) as conn:
+                r = conn.execute(
+                    "SELECT state, tier, archived, muted FROM episode WHERE id=?", (item_id,)
+                ).fetchone()
+            if r is None:
+                return ""
+            return r["state"] or IT.compat_state(r["tier"], r["archived"], r["muted"])
+
+    def transition(self, item_id: str, action: str, **kwargs) -> dict:
+        """状态转移的唯一门面（API/工具/测试都从这里进）。"""
+        kwargs.setdefault("cfg", self.cfg)
+        kwargs.setdefault("actor", IT.ACTOR_SYSTEM)
+        tr = TR.transition(item_id, action, **kwargs)
+        return tr.to_dict()
+
+    def state_log(self, item_id: str, limit: int = 50) -> list[dict]:
+        return TR.state_log(item_id, cfg=self.cfg, limit=limit)
 
     def themes(self, session_id: str | None = None, limit: int = 50) -> list[dict]:
         sid = session_id or "*"
@@ -489,30 +522,41 @@ class Memory:
         return {"seeded": True, "session_id": session_id}
 
     def promote(self, item_id: str, target_tier: str = PR.TIER_RESIDENT) -> dict:
-        """升格闸门：能不能进常驻，不由分数决定。"""
-        with DB.reader(self.cfg.db_path) as conn:
-            r = conn.execute(
-                "SELECT id, author, memory_type, confirmed, source, tier FROM episode WHERE id=?",
-                (item_id,),
-            ).fetchone()
-            if r is None:
-                r2 = conn.execute(
-                    "SELECT id, author, memory_type, t_valid_from, status FROM fact WHERE id=?",
-                    (item_id,),
-                ).fetchone()
-                if r2 is None:
-                    return {"ok": False, "reason": "条目不存在"}
-                return {"ok": False, "reason": "事实条目不走人格升格，请用状态槽"}
+        """升格闸门：能不能进常驻，不由分数决定。
 
-        allowed, why = PR.can_promote(
-            target_tier, r["author"], r["memory_type"], bool(r["confirmed"]), r["source"]
+        判定收口 `gate.decide()`（内部保留 `PR.can_promote`），落库/留痕收口
+        `pipeline.transition()` —— 不再直接 UPDATE episode.tier。
+        """
+        action = {
+            PR.TIER_RESIDENT: "promote_resident",
+            PR.TIER_IMPORTANT: "mark_important",
+            PR.TIER_RETRIEVAL: "demote",
+        }.get(target_tier)
+        if action is None:
+            return {"ok": False, "reason": f"未知层级 {target_tier}"}
+
+        tr = TR.transition(
+            item_id,
+            action,
+            target=target_tier,
+            reason="Memory.promote",
+            actor=IT.ACTOR_SYSTEM,
+            cfg=self.cfg,
         )
-        if not allowed:
-            return {"ok": False, "reason": why, "from": r["tier"], "to": target_tier}
-
-        with DB.tx(self.cfg.db_path) as conn:
-            conn.execute("UPDATE episode SET tier=? WHERE id=?", (target_tier, item_id))
-        return {"ok": True, "reason": why, "from": r["tier"], "to": target_tier}
+        if tr.ok:
+            return {
+                "ok": True,
+                "reason": tr.reason,
+                "from": tr.from_state,
+                "to": tr.to_state,
+                "state": tr.to_state,
+            }
+        return {
+            "ok": False,
+            "reason": tr.reason,
+            "from": tr.from_state,
+            "to": target_tier,
+        }
 
     def confirm(self, item_id: str) -> dict:
         with DB.tx(self.cfg.db_path) as conn:
@@ -520,32 +564,49 @@ class Memory:
         return {"confirmed": True, "id": item_id}
 
     def correct(self, old_id: str, new_text: str, author: str = PR.A_SELF) -> dict:
-        """订正：旧条目保留，新条目指回旧条目。原文永不覆盖。"""
+        """订正：旧条目保留，新条目指回旧条目。原文永不覆盖。
+
+        新条经 `pipeline.submit()` 落库（唯一写入点），并继承旧条状态；
+        派生事实与状态槽同步失效仍在本方法内完成。
+        """
         now = time.time()
         with DB.reader(self.cfg.db_path) as conn:
             r = conn.execute("SELECT * FROM episode WHERE id=?", (old_id,)).fetchone()
         if r is None:
             return {"ok": False, "reason": "原条目不存在"}
 
+        old = IT.MemoryItem.from_row(r)
         new_id = "ep_corr_" + IDS._digest(old_id, new_text, int(now))  # noqa: SLF001
+        actor = {
+            PR.A_SELF: IT.ACTOR_MODEL,
+            PR.A_TEACHER: IT.ACTOR_USER,
+            PR.A_SYSTEM: IT.ACTOR_SYSTEM,
+        }.get(author, IT.ACTOR_SYSTEM)
+        item = IT.MemoryItem(
+            id=new_id,
+            session_id=old.session_id,
+            text=(new_text or "").strip(),
+            origin=IT.ORIGIN_INGEST,
+            actor=actor,
+            memory_type=old.memory_type,
+            state=old.state,
+            salience=min(1.0, old.salience + 0.1),
+            emotion=old.emotion or 0.0,
+            t_event=now,
+            t_ingest=now,
+            role="correction",
+            source=PR.S_REFLECTION,
+            author=author,
+            meta={"is_correction": True},
+        )
+        sub = TR.submit(item, project=False, cfg=self.cfg, embedder=self.embedder, llm=self.llm_hot)
+        if not sub.ok:
+            return {"ok": False, "reason": sub.reason}
+        if sub.duplicate:
+            return {"ok": True, "new_id": sub.item_id, "old_id": old_id, "duplicate": True}
+
         with DB.tx(self.cfg.db_path) as conn:
-            conn.execute(
-                """INSERT OR IGNORE INTO episode
-                   (id,session_id,seq,role,text,t_event,t_ingest,source,tier,memory_type,author,
-                    salience,emotion,correction_of,meta_json)
-                   VALUES(?,?,?,'correction',?,?,?,'self_reflection',?,?,?,?,?,?,?)""",
-                (
-                    new_id, r["session_id"], r["seq"], new_text, now, now,
-                    r["tier"], r["memory_type"], author,
-                    min(1.0, r["salience"] + 0.1), r["emotion"] or 0.0, old_id,
-                    '{"is_correction": true}',
-                ),
-            )
-            conn.execute("UPDATE episode SET superseded_by=? WHERE id=?", (new_id, old_id))
-            conn.execute(
-                "INSERT INTO episode_fts(episode_id,tokens) VALUES(?,?)",
-                (new_id, " ".join(TX.tokenize(new_text))),
-            )
+            conn.execute("UPDATE episode SET superseded_by=? WHERE id=?", (sub.item_id, old_id))
             # 订正必须落到事实层，否则 prompt 里会出现"当前状态 A"+"我其实住在 B"的矛盾
             conn.execute(
                 "UPDATE fact SET status='invalidated', t_invalid=?, t_valid_to=? WHERE source_episode=? AND status='active'",
@@ -555,15 +616,19 @@ class Memory:
                 "UPDATE state_slot SET until=? WHERE source_fact IN (SELECT id FROM fact WHERE source_episode=?) AND until IS NULL",
                 (now, old_id),
             )
+        TR.transition(
+            old_id, "revise", target=sub.item_id, reason="订正",
+            actor=actor, cfg=self.cfg,
+        )
         return {
             "ok": True,
-            "new_id": new_id,
+            "new_id": sub.item_id,
             "old_id": old_id,
             "note": "旧条目保留但不再浮现；派生事实与状态已同步失效",
         }
 
     def remove(self, item_id: str, author: str = PR.A_TEACHER, reason: str = "manual") -> dict:
-        """删除：写墓碑，重建索引也不会复活。"""
+        """删除：写墓碑，重建索引也不会复活。状态转移走 pipeline（attempts archive）。"""
         now = time.time()
         with DB.tx(self.cfg.db_path) as conn:
             r = conn.execute("SELECT chunk_key, session_id FROM episode WHERE id=?", (item_id,)).fetchone()
@@ -573,8 +638,15 @@ class Memory:
                 "INSERT OR REPLACE INTO tombstone(chunk_key,line_ids,session_id,deleted_at,reason,author) VALUES(?,?,?,?,?,?)",
                 (r["chunk_key"] or item_id, f'["{item_id}"]', r["session_id"], now, reason, author),
             )
-            conn.execute("UPDATE episode SET archived=1, muted=1 WHERE id=?", (item_id,))
-        return {"ok": True, "tombstoned": True, "id": item_id}
+        tr = TR.transition(
+            item_id, "archive", reason=f"manual remove: {reason}",
+            actor=IT.ACTOR_USER if author == PR.A_TEACHER else IT.ACTOR_SYSTEM,
+            cfg=self.cfg,
+        )
+        if not tr.ok:
+            # 状态机拒绝（如已归档）不应让删除失败：墓碑已是删除真值
+            log.debug("remove: transition archive failed: %s", tr.reason)
+        return {"ok": True, "tombstoned": True, "id": item_id, "state": tr.to_state}
 
     def resident_list(self, session_id: str = "default") -> list[dict]:
         with DB.reader(self.cfg.db_path) as conn:

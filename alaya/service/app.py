@@ -22,6 +22,8 @@ from pydantic import BaseModel, Field
 
 from ..config import Config
 from ..core.memory import Memory
+from ..tools import item_state as _item_state
+from ..tools import transition_item
 
 log = logging.getLogger("alaya.service")
 
@@ -129,32 +131,20 @@ class OnboardIn(BaseModel):
 
 
 def get_harness():
-    """Harness 单例。llm_callable 从 cfg 的模型配置构造。"""
+    """Harness 单例。llm_callable 从 cfg 的模型配置构造。
+
+    旧实现把 messages 压成 system+对话交给 LLM.chat，模型根本没有工具可调，
+    tool_calls 恒为 []——这是主动记忆在真实产品里从不发生的根因。
+    现在统一用 `make_llm_callable`：原生工具协议优先（OpenAI 兼容 / Ollama，
+    tool_calls 原样透传，含 id / arguments / usage / finish_reason），
+    上游不支持时安静降级为纯文本通道，绝不抛。
+    """
     global _harness
     if _harness is None:
-        from ..harness import Harness
+        from ..harness import Harness, make_llm_callable
 
         mem = get_mem()
-
-        def llm_call(messages, tools=None):
-            """把 messages 列表压成 (system, 对话) 交给底层 LLM。
-
-            本地小模型对 function calling 支持参差，所以这里不用原生 tools，
-            模型只负责说话，记忆写入靠 harness 的自动管线。
-            """
-            system_parts = []
-            convo = []
-            for m in messages or []:
-                role = m.get("role", "user")
-                content = m.get("content") or ""
-                if role == "system":
-                    system_parts.append(content)
-                elif role == "tool":
-                    convo.append(f"（工具结果）{content}")
-                else:
-                    convo.append(f"{'他' if role == 'user' else '你'}：{content}")
-            out = mem.llm_hot.chat("\n".join(system_parts), "\n".join(convo), max_tokens=400)
-            return {"content": _clean_reply(out or ""), "tool_calls": []}
+        llm_call = make_llm_callable(mem.llm_hot, clean=_clean_reply, max_tokens=400)
 
         _harness = Harness(mem.cfg, llm_call, auto_tick=False)
         _harness.mem = mem
@@ -220,6 +210,13 @@ class ContextIn(BaseModel):
 class TurnIn(BaseModel):
     text: str
     session_id: str = "default"
+
+
+class TransitionIn(BaseModel):
+    action: str = Field(..., description="promote / skip / mute / archive / restore / unmute")
+    target: str = ""
+    reason: str = ""
+    actor: str = "system"
 
 
 class CorrectIn(BaseModel):
@@ -387,6 +384,30 @@ def create_app() -> FastAPI:
     @app.get("/v1/sessions", tags=["读"])
     def get_sessions():
         return ok(get_mem().sessions())
+
+    # ── item 状态机（运维接口；公共 API 与工具共用同一套 state）──
+    @app.get("/v1/items/{item_id}/state", tags=["运维"])
+    def get_item_state(item_id: str):
+        """查任意 item 的当前状态（inbox/note/resident/important/archived/muted/dream）。"""
+        d = _item_state(get_mem(), item_id)
+        if d is None:
+            return fail("not_found", "条目不存在", 404)
+        return ok(d)
+
+    @app.post("/v1/items/{item_id}/transition", tags=["运维"])
+    def post_item_transition(item_id: str, body: TransitionIn):
+        """显式状态迁移。gate 决定能不能迁；拒绝时返回原因而不是静默成功。"""
+        try:
+            r = transition_item(
+                get_mem(), item_id, body.action,
+                target=body.target, reason=body.reason, actor=body.actor,
+            )
+        except Exception as e:  # pragma: no cover
+            log.exception("transition failed")
+            return fail("transition_failed", f"{type(e).__name__}: {e}", 500)
+        if not r.get("ok") and str(r.get("reason") or "").startswith("条目不存在"):
+            return fail("not_found", str(r["reason"]), 404)
+        return ok(r)
 
     # ── 主动记忆 ──────────────────────────────────────────
     @app.get("/v1/notebook", tags=["主动记忆"])

@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from ..config import Config
 from . import db as DB
 from . import ids as IDS
+from . import memory_field as MF
 from .llm import LLM
 
 log = logging.getLogger("alaya.forget")
@@ -32,12 +33,26 @@ class ForgetReport:
         return self.__dict__.copy()
 
 
-def retention(cfg: Config, t_ref: float, access_count: int, salience: float, now: float) -> float:
-    """R = exp(-Δt / S)。S 随召回次数与重要度增长，所以重要的事衰减更慢。"""
+def retention(
+    cfg: Config,
+    t_ref: float,
+    access_count: int,
+    salience: float,
+    now: float,
+    *,
+    space: str = "knowledge",
+) -> float:
+    """R = exp(-Δt / S)。S 随召回次数与重要度增长，所以重要的事衰减更慢。
+
+    空间衰减倍率（docs/15 §1.1）乘在 Δt 上：
+    `Δt_eff = Δt × SPACE_DECAY[space]`，identity 0.1（几乎不衰减）、
+    knowledge 1.0（不变）、operational 3.0（烧得快）。
+    默认 knowledge，所以旧调用方（audit 等）行为不变。
+    """
     s = cfg.decay_base_strength * (1.0 + math.log(1 + max(0, access_count))) * (0.5 + salience)
     if s <= 0:
         return 0.0
-    dt = max(0.0, now - t_ref)
+    dt = max(0.0, now - t_ref) * MF.decay_factor(space)
     return math.exp(-dt / s)
 
 
@@ -47,7 +62,7 @@ def run_decay_only(cfg: Config, session_id: str, now: float | None = None) -> in
     n = 0
     with DB.tx(cfg.db_path) as conn:
         rows = conn.execute(
-            """SELECT id, t_event, access_count, salience FROM episode
+            """SELECT id, t_event, access_count, salience, tier, source, memory_type FROM episode
                WHERE session_id=? AND archived=0 AND folded_into IS NULL
                  AND pinned=0 AND tier!='resident'
                LIMIT 2000""",
@@ -56,7 +71,8 @@ def run_decay_only(cfg: Config, session_id: str, now: float | None = None) -> in
         for r in rows:
             if r["salience"] >= cfg.forget_protect_salience:
                 continue
-            if retention(cfg, r["t_event"], r["access_count"], r["salience"], now) < cfg.forget_archive_r:
+            space = MF.classify_space("episode", r["tier"], r["source"], r["memory_type"])
+            if retention(cfg, r["t_event"], r["access_count"], r["salience"], now, space=space) < cfg.forget_archive_r:
                 conn.execute("UPDATE episode SET archived=1 WHERE id=?", (r["id"],))
                 n += 1
     return n
@@ -70,7 +86,8 @@ def run(cfg: Config, llm: LLM | None, session_id: str | None = None, now: float 
 
     with DB.reader(cfg.db_path) as conn:
         rows = conn.execute(
-            """SELECT id, session_id, text, t_event, access_count, salience, pinned
+            """SELECT id, session_id, text, t_event, access_count, salience, pinned,
+                      tier, source, memory_type
                FROM episode WHERE (?='*' OR session_id=?)
                  AND archived=0 AND folded_into IS NULL AND tier!='resident' AND pinned=0
                ORDER BY t_event ASC LIMIT 5000""",
@@ -83,7 +100,8 @@ def run(cfg: Config, llm: LLM | None, session_id: str | None = None, now: float 
         if r["pinned"] or r["salience"] >= cfg.forget_protect_salience:
             rep.protected += 1
             continue
-        rr = retention(cfg, r["t_event"], r["access_count"], r["salience"], now)
+        space = MF.classify_space("episode", r["tier"], r["source"], r["memory_type"])
+        rr = retention(cfg, r["t_event"], r["access_count"], r["salience"], now, space=space)
         if rr < cfg.forget_archive_r:
             cold.append({"row": r, "r": rr})
 

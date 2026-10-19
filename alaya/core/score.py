@@ -10,6 +10,8 @@ import re
 from dataclasses import dataclass
 
 from ..config import BudgetPlan, ScoringWeights
+from . import field as FD
+from . import memory_field as MF
 from . import vec as V
 
 # ── 情感词表：分强度，带否定翻转 ──────────────────────────────
@@ -124,6 +126,9 @@ class Candidate:
     cooldown_until: float = 0.0
     muted: bool = False
     correction_of: str | None = None
+    # 语义场：空间归属与 ACT-R 激活（docs/15 §1.2 第 3 步）
+    space: str = ""                # identity / knowledge / operational，空则按 kind/tier/source 推断
+    activation: float | None = None  # A_i(t)，None 时由 t_ref/last_recall/access_count 现算
     # 分项
     rel: float = 0.0
     graph_prox: float = 0.0
@@ -205,8 +210,17 @@ def score_one(
         - (w.polarity_penalty if c.polarity_conflict else 0.0)
         - (w.scope_penalty if not c.scope_ok else 0.0)
     )
-    boost = 1.0 + w.access_boost * math.log(1 + max(0, c.access_count))
-    return max(0.0, min(1.5, raw * boost))
+    # docs/15 §1.2：把裸 access_count 加成项换成 ACT-R 激活 A_i(t)，并乘空间倍率。
+    # 公式骨架仍是 docs/03 §4.3 的 `final = raw × (1 + α·x)`，α=w.access_boost 不变；
+    # 只是 x 从 log(1+access_count) 换成 activation_odds(A)·space_weight：
+    #   - 同样 5 次访问，昨天访问和一年前访问的 A 差很多（幂律时间衰减）；
+    #   - identity 几乎不吃"最近想起"的加成，operational 吃满（×3）。
+    act = c.activation
+    if act is None:
+        act = FD.activation_from_parts(c.t_ref, c.last_recall, c.access_count, c.salience, now)
+    space = c.space or MF.classify_space(c.kind, c.tier, "", c.memory_type)
+    boost = 1.0 + w.access_boost * MF.activation_odds(act) * MF.space_weight(space)
+    return max(0.0, min(1.5, raw * min(1.5, max(1.0, boost))))
 
 
 def calibrate_rel(cosines: list[float]) -> list[float]:
@@ -247,6 +261,17 @@ def rank_and_densify(
 
     p = policy
     for c in cands:
+        # 语义场：先定空间归属并算一次 ACT-R 激活，供 score_one 使用。
+        # 空间按 docs/15 §1.1 的归属口径，激活用库里已有的痕迹字段重建。
+        if not c.space:
+            c.space = MF.classify_space(
+                c.kind,
+                c.tier,
+                str((c.meta or {}).get("source") or ""),
+                c.memory_type,
+            )
+        if c.activation is None:
+            c.activation = FD.activation_from_parts(c.t_ref, c.last_recall, c.access_count, c.salience, now)
         c.score = score_one(
             c,
             now,

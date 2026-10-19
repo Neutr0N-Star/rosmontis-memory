@@ -68,6 +68,23 @@ curl -X POST http://127.0.0.1:8770/v1/turn \
   -d '{"session_id":"u1","text":"我今天有点累"}'
 ```
 
+需要逐字输出时用 SSE：`POST /v1/turn/stream`（事件序列 `meta → (tool)* → delta* → done`，`fetch` 读流即可）：
+
+```js
+const r = await fetch("http://127.0.0.1:8770/v1/turn/stream", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ session_id: "u1", text: "我今天有点累" }),
+});
+const reader = r.body.getReader();      // 逐块解析 "event: delta\ndata: {...}\n\n"
+```
+
+Docker 一条命令：
+
+```bash
+docker compose up --build      # 只绑 127.0.0.1:8770，数据在 ./data
+```
+
 前端只需要三类调用：**说话**（`/v1/turn` 或 `/v1/turn/stream` 流式）、**看**（`/v1/state`、`/v1/episodes`）、**打烊**（`/v1/session/sleep`）。
 禁止直连数据库——换前端不该改后端。
 
@@ -100,7 +117,7 @@ curl -X POST http://127.0.0.1:8770/v1/turn \
 ```bash
 alaya serve --port 8770      # 本地服务（默认只绑 127.0.0.1）
 python run.py demo --reset   # 三个月对话演示（不需要模型）
-python -m unittest discover -s tests -p "test_*.py"   # 全部测试（93 项）
+python -m unittest discover -s tests -p "test_*.py"   # 全部测试（98 项）
 python bench/run_eval.py     # 质量基准（200 段合成对话 / 135 题）
 python bench/pareto.py       # 配置网格 → 帕累托前沿 → bench/report.md
 ```

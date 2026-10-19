@@ -575,6 +575,69 @@ class Harness:
             finish_reason=finish_reason,
         ).to_dict()
 
+    def turn_stream(
+        self,
+        user_text: str,
+        session_id: str = "default",
+        *,
+        chunk_chars: int = 24,
+        history: list[dict] | None = None,
+        extra_system: str | None = None,
+    ):
+        """流式版 `turn`：先 `meta`，再 `tool*`，再 `delta*`，最后 `done`。
+
+        上游模型不支持 token 流时，这里按段切分回复文本——**接口形态不退化**，
+        前端不需要区分"真流式"和"服务端切段"。
+
+        助手文本只在全部 delta 发完之后才写回记忆：客户端中途断开时生成器被关闭，
+        流程走不到写回那一步，避免把半截话当成长期记忆。
+        """
+        t0 = time.perf_counter()
+        text = (user_text or "").strip()
+        if not text:
+            raise ValueError("text 不能为空")
+
+        self.mem.ingest_async(text, session_id=session_id, role="user")
+        if self.auto_tick:
+            self._spawn(self._bg_tick, session_id)
+
+        ctx = build_context(self.mem, text, session_id, self.memory_budget)
+        yield {
+            "event": "meta",
+            "data": {
+                "persona_chars": ctx["parts"]["persona"]["chars"],
+                "memory_items": ctx["parts"]["memory"].get("items"),
+                "memory_tokens": ctx.get("memory_tokens"),
+                "depth": ctx["parts"]["memory"].get("depth"),
+                "abstained": bool(ctx["parts"]["memory"].get("abstained")),
+            },
+        }
+
+        messages = self._build_messages(ctx, text, history=history, extra_system=extra_system)
+        reply, tools_called, rounds, usage, finish_reason = self._run_loop(messages, session_id)
+
+        for call in tools_called:
+            yield {"event": "tool", "data": call}
+
+        for piece in _chunk_text(reply, chunk_chars):
+            yield {"event": "delta", "data": {"text": piece}}
+
+        if reply:
+            self.mem.ingest_async(reply, session_id=session_id, role="assistant")
+
+        yield {
+            "event": "done",
+            "data": {
+                "reply": reply,
+                "rounds": rounds,
+                "tools_called": tools_called,
+                "finish_reason": finish_reason,
+                "usage": usage,
+                "memory_tokens": ctx.get("memory_tokens"),
+                "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
+            },
+        }
+
     def _build_messages(
         self,
         ctx: dict,
@@ -582,6 +645,7 @@ class Harness:
         history: list[dict] | None = None,
         extra_system: str | None = None,
     ) -> list[dict]:
+        """把上下文渲染成 messages。history 只取 user/assistant，超长部分截断。"""
         system = self.system_prompt
         if ctx.get("system_prefix"):
             system += "\n\n" + ctx["system_prefix"]
@@ -753,6 +817,14 @@ class Harness:
             t.join(timeout=timeout)
         with self._lock:
             self._bg.clear()
+
+
+def _chunk_text(text: str, size: int = 24):
+    """把整段回复切成小块，供"上游不支持流式"时前端仍有逐段体验。"""
+    text = text or ""
+    size = max(1, int(size or 24))
+    for i in range(0, len(text), size):
+        yield text[i : i + size]
 
 
 def _stringify(d: dict) -> str:

@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import time
@@ -213,6 +214,12 @@ class TurnIn(BaseModel):
     session_id: str = "default"
 
 
+class StreamIn(BaseModel):
+    """流式对话入参（SSE）：前端最常用的一条。"""
+    text: str
+    session_id: str = "default"
+
+
 class TransitionIn(BaseModel):
     action: str = Field(..., description="promote / skip / mute / archive / restore / unmute")
     target: str = ""
@@ -252,9 +259,21 @@ def create_app() -> FastAPI:
         description="长期陪伴 AI 的记忆器官：五层记忆 + 三轴 + 预算约束检索",
         lifespan=_lifespan,
     )
+    # CORS：默认只放行本机常见前端端口与 file:// 打开（Origin: null）；
+    # 远程/自定义来源用 ALAYA_CORS_ORIGINS 显式配置（逗号分隔）。
+    _cors_env = (os.environ.get("ALAYA_CORS_ORIGINS") or "").strip()
+    if _cors_env:
+        _cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
+    else:
+        _cors_origins = [
+            "http://127.0.0.1:8770", "http://localhost:8770",
+            "http://127.0.0.1:3000", "http://localhost:3000",
+            "http://127.0.0.1:5173", "http://localhost:5173",
+            "null",  # 前端用 file:// 直接打开时的 Origin
+        ]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=_cors_origins,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -308,8 +327,15 @@ def create_app() -> FastAPI:
             )
         return JSONResponse({"ok": True, "data": data, "error": None})
 
-    def fail(code: str, msg: str, status: int = 400) -> JSONResponse:
-        return JSONResponse({"ok": False, "data": None, "error": {"code": code, "message": msg}}, status_code=status)
+    def fail(code: str, msg: str, status: int = 400, retryable: bool | None = None) -> JSONResponse:
+        """统一失败信封。5xx 默认标 retryable，客户端可据它决定是否重试。"""
+        if retryable is None:
+            retryable = status >= 500
+        return JSONResponse(
+            {"ok": False, "data": None,
+             "error": {"code": code, "retryable": retryable, "message": msg}},
+            status_code=status,
+        )
 
     # ── 写 ────────────────────────────────────────────────
     @app.post("/v1/episodes", tags=["写入"])
@@ -470,6 +496,40 @@ def create_app() -> FastAPI:
         except Exception as e:
             log.exception("turn failed")
             return fail("turn_failed", f"{type(e).__name__}: {e}", 500)
+
+    @app.post("/v1/turn/stream", tags=["Harness"])
+    def post_turn_stream(body: StreamIn):
+        """一轮对话的 SSE 流：`meta → (tool)* → delta* → done`。
+
+        前端用 `fetch` 读流即可（不必用 EventSource，因为要 POST body）。
+        上游模型不支持 token 流时，服务端按段切分，**接口形态不退化**。
+        """
+        from fastapi.responses import StreamingResponse
+
+        if not (body.text or "").strip():
+            return fail("empty_text", "说的是空的，她没法接话", 422)
+        harness = get_harness()
+
+        def _sse(event: str, data: Any) -> str:
+            return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+        def _gen():
+            try:
+                for ev in harness.turn_stream(body.text, body.session_id):
+                    yield _sse(ev["event"], ev["data"])
+            except Exception as e:  # 流已经开了，错误只能作为事件送出
+                log.exception("turn_stream failed")
+                yield _sse(
+                    "error",
+                    {"code": "turn_failed", "retryable": True,
+                     "message": f"{type(e).__name__}: {e}"[:300]},
+                )
+
+        return StreamingResponse(
+            _gen(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     @app.post("/v1/session/wake", tags=["Harness"])
     def post_wake(session_id: str = "default"):

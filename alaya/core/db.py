@@ -74,6 +74,23 @@ def close_thread_conns() -> None:
             delattr(_local, name)
 
 
+# 性能索引：dense 近因窗口按 (session_id, t_ingest DESC) 取数、序号取 MAX(seq)。
+# 用 IF NOT EXISTS 幂等补齐，老库升级不改 user_version；失败只告警不阻塞启动。
+_PERF_INDEXES = (
+    "CREATE INDEX IF NOT EXISTS idx_ep_sess_ingest ON episode(session_id, t_ingest DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_fact_sess_ingest ON fact(session_id, t_ingest DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_ep_sess_seq ON episode(session_id, seq DESC)",
+)
+
+
+def _ensure_perf_indexes(conn: sqlite3.Connection) -> None:
+    for sql in _PERF_INDEXES:
+        try:
+            conn.execute(sql)
+        except sqlite3.Error as e:
+            log.warning("perf index failed (%s): %s", sql, e)
+
+
 def init_db(db_path: str) -> None:
     with _init_lock:
         conn = connect(db_path)
@@ -88,6 +105,7 @@ def init_db(db_path: str) -> None:
             version = SCHEMA_VERSION
         if version < SCHEMA_VERSION:
             _migrate(conn, version)
+        _ensure_perf_indexes(conn)
 
         row = conn.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()
         if row is None:

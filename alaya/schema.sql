@@ -232,3 +232,8 @@ CREATE TABLE IF NOT EXISTS item_state_log (
     actor      TEXT NOT NULL DEFAULT 'system'
 );
 CREATE INDEX IF NOT EXISTS idx_log_item ON item_state_log(item_id, at);
+
+-- ── 性能索引（v3 起，幂等补齐）：dense 近因窗口与 seq 取号 ──────
+CREATE INDEX IF NOT EXISTS idx_ep_sess_ingest   ON episode(session_id, t_ingest DESC);
+CREATE INDEX IF NOT EXISTS idx_fact_sess_ingest ON fact(session_id, t_ingest DESC);
+CREATE INDEX IF NOT EXISTS idx_ep_sess_seq      ON episode(session_id, seq DESC);

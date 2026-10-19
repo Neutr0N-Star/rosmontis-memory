@@ -174,6 +174,9 @@ class Config:
     recall_k_sparse: int = field(default_factory=lambda: _envi("ALAYA_K_SPARSE", 40))
     recall_k_graph: int = field(default_factory=lambda: _envi("ALAYA_K_GRAPH", 30))
     budget_tokens: int = field(default_factory=lambda: _envi("ALAYA_BUDGET", 1400))
+    # dense 近因窗口：每次向量扫描最多取最近 N 条。调小能显著降延迟，但会牺牲
+    # 很久以前但仍相关的记忆（时序题最敏感）。默认保持 20000；调参见 bench/pareto。
+    recall_dense_window: int = field(default_factory=lambda: _envi("ALAYA_DENSE_WINDOW", 20000))
     mmr_lambda: float = field(default_factory=lambda: _envf("ALAYA_MMR", 0.72))
     graph_hops: int = field(default_factory=lambda: _envi("ALAYA_HOPS", 2))
     # 可见性（C2=B）：inbox 速记默认不参与召回；打开后允许检索（调试/回滚用）

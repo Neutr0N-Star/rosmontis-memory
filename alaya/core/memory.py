@@ -48,6 +48,7 @@ class Memory:
             dim=self.cfg.embed_dim,
             ollama_url=self.cfg.ollama_url,
             timeout=self.cfg.embed_timeout,
+            model_id=self.cfg.embed_model_id,  # 向量身份（v4）
         )
         self.llm_hot = LLM(
             provider=self.cfg.llm_hot,
@@ -850,11 +851,146 @@ class Memory:
                 "state_open": c("state_slot", "until IS NULL"),
                 "theme": c("hyperedge"),
                 "db_path": self.cfg.db_path,
-                "embed": self.embedder.health(),
+                "embed": self.embedder.health(probe=False),
+                "embed_model": getattr(self.embedder, "model_id", "") or self.cfg.embed_model_id,
+                "embed_dim": int(getattr(self.embedder, "dim", self.cfg.embed_dim) or 0),
+                "vector_mode": self.embedder.vector_mode(),
+                "pending_backfill": self.pending_backfill(),
                 "llm_hot": {"provider": self.llm_hot.provider, "model": self.llm_hot.model, "calls": self.llm_hot.calls, "failures": self.llm_hot.failures},
                 "llm_deep": {"provider": self.llm_deep.provider, "model": self.llm_deep.model, "calls": self.llm_deep.calls, "failures": self.llm_deep.failures},
                 "degraded": self.embedder.degraded,
             }
+
+    # ── 向量身份与 NULL 回算（C4）────────────────────────
+    def vector_mode(self) -> str:
+        """semantic / degraded / none（/readyz 与 stats 共用）。"""
+        return self.embedder.vector_mode() if self.embedder is not None else "none"
+
+    def pending_backfill(self, session_id: str | None = None) -> int:
+        """还差多少条 NULL 向量（episode + fact）。"""
+        with DB.reader(self.cfg.db_path) as conn:
+            n = 0
+            if session_id:
+                n += int(
+                    conn.execute(
+                        "SELECT COUNT(*) c FROM episode WHERE embedding IS NULL AND session_id=?",
+                        (session_id,),
+                    ).fetchone()["c"]
+                )
+                n += int(
+                    conn.execute(
+                        "SELECT COUNT(*) c FROM fact WHERE embedding IS NULL AND session_id=?",
+                        (session_id,),
+                    ).fetchone()["c"]
+                )
+            else:
+                n += int(conn.execute("SELECT COUNT(*) c FROM episode WHERE embedding IS NULL").fetchone()["c"])
+                n += int(conn.execute("SELECT COUNT(*) c FROM fact WHERE embedding IS NULL").fetchone()["c"])
+        return n
+
+    def backfill_embeddings(
+        self,
+        *,
+        limit: int = 500,
+        session_id: str | None = None,
+        now: float | None = None,
+    ) -> dict:
+        """把降级期写下的 NULL 向量补齐（job kind=embed_backfill 的执行体）。
+
+        - 只读一批 NULL 行 → 批量算向量 → **一个事务** executemany 回写；
+        - 回写同时记录向量身份（embed_model/embed_dim）；
+        - 语义模式不可用（hash/none/断路）时直接跳过，不写伪向量。
+        """
+        emb = self.embedder
+        mode = emb.vector_mode() if emb is not None else "none"
+        base: dict = {
+            "scanned": 0,
+            "filled": 0,
+            "filled_episode": 0,
+            "filled_fact": 0,
+            "remaining": 0,
+            "embed_model": getattr(emb, "model_id", "") if emb is not None else "",
+            "embed_dim": int(getattr(emb, "dim", 0) or 0) if emb is not None else 0,
+            "vector_mode": mode,
+            "skipped": False,
+            "reason": "",
+        }
+        if emb is None or mode != "semantic" or getattr(emb, "degraded", False):
+            base["skipped"] = True
+            base["reason"] = f"embedder 不可用（vector_mode={mode}），不写伪向量"
+            base["remaining"] = self.pending_backfill(session_id)
+            return base
+
+        limit = max(1, min(int(limit), 5000))
+        with DB.reader(self.cfg.db_path) as conn:
+            if session_id:
+                episodes = conn.execute(
+                    """SELECT id, text FROM episode
+                       WHERE embedding IS NULL AND session_id=? AND text IS NOT NULL AND text!=''
+                       ORDER BY t_ingest DESC LIMIT ?""",
+                    (session_id, limit),
+                ).fetchall()
+                facts = conn.execute(
+                    """SELECT id, predicate, object_text FROM fact
+                       WHERE embedding IS NULL AND session_id=?
+                       ORDER BY t_ingest DESC LIMIT ?""",
+                    (session_id, limit),
+                ).fetchall()
+            else:
+                episodes = conn.execute(
+                    """SELECT id, text FROM episode
+                       WHERE embedding IS NULL AND text IS NOT NULL AND text!=''
+                       ORDER BY t_ingest DESC LIMIT ?""",
+                    (limit,),
+                ).fetchall()
+                facts = conn.execute(
+                    """SELECT id, predicate, object_text FROM fact
+                       WHERE embedding IS NULL ORDER BY t_ingest DESC LIMIT ?""",
+                    (limit,),
+                ).fetchall()
+
+        model_id = str(getattr(emb, "model_id", "") or "").strip() or None
+        dim = int(getattr(emb, "dim", 0) or 0) or None
+        ep_updates: list[tuple] = []
+        fact_updates: list[tuple] = []
+        for r in episodes:
+            if emb.degraded:
+                break
+            blob = emb.embed_blob(r["text"])
+            if emb.degraded or not blob:
+                break
+            ep_updates.append((blob, model_id, dim, r["id"]))
+        for r in facts:
+            if emb.degraded:
+                break
+            text = f"{r['predicate']} {r['object_text']}".strip()
+            blob = emb.embed_blob(text)
+            if emb.degraded or not blob:
+                break
+            fact_updates.append((blob, model_id, dim, r["id"]))
+
+        if ep_updates or fact_updates:
+            with DB.tx(self.cfg.db_path) as conn:
+                if ep_updates:
+                    conn.executemany(
+                        "UPDATE episode SET embedding=?, embed_model=?, embed_dim=? WHERE id=?",
+                        ep_updates,
+                    )
+                if fact_updates:
+                    conn.executemany(
+                        "UPDATE fact SET embedding=?, embed_model=?, embed_dim=? WHERE id=?",
+                        fact_updates,
+                    )
+
+        base["scanned"] = len(episodes) + len(facts)
+        base["filled_episode"] = len(ep_updates)
+        base["filled_fact"] = len(fact_updates)
+        base["filled"] = len(ep_updates) + len(fact_updates)
+        if emb.degraded:
+            base["skipped"] = True
+            base["reason"] = emb.degraded_reason or "embedding 降级，本轮提前停止"
+        base["remaining"] = self.pending_backfill(session_id)
+        return base
 
     def sessions(self) -> list[dict]:
         with DB.reader(self.cfg.db_path) as conn:

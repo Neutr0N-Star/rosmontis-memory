@@ -49,6 +49,43 @@ class IngestResult:
         return d
 
 
+def embedding_identity(embedder) -> tuple[str | None, int | None]:
+    """当前 embedder 的向量身份（写 episode/fact.embed_model/embed_dim 用）。"""
+    if embedder is None:
+        return None, None
+    try:
+        model_id = str(
+            getattr(embedder, "model_id", "") or getattr(embedder, "model", "") or ""
+        ).strip()
+        dim = int(getattr(embedder, "dim", 0) or 0)
+    except (TypeError, ValueError):
+        return None, None
+    return (model_id or None), (dim or None)
+
+
+def stamp_episode_embedding(cfg: Config, item_id: str, embedder) -> bool:
+    """给刚写入的 episode 补向量身份。
+
+    `pipeline.submit` 的契约没有 embed_model/embed_dim 字段（v4 只加列，不改
+    pipeline 接口），所以写入成功后在这里用一次 UPDATE 补齐；旧数据保持 NULL。
+    """
+    if not item_id:
+        return False
+    model_id, dim = embedding_identity(embedder)
+    if model_id is None:
+        return False
+    try:
+        with DB.tx(cfg.db_path) as conn:
+            conn.execute(
+                "UPDATE episode SET embed_model=?, embed_dim=? WHERE id=?",
+                (model_id, dim, item_id),
+            )
+        return True
+    except Exception as e:  # 身份补写失败不影响记忆本身
+        log.debug("stamp embedding identity failed: %s", e)
+        return False
+
+
 def ensure_session(cfg: Config, conn, session_id: str, agent_id: str = "default", user_id: str = "default", now: float | None = None) -> None:
     now = now or time.time()
     conn.execute(
@@ -138,6 +175,9 @@ def ingest(
         return IngestResult(episode_id=sub.item_id, duplicate=True, note="已存在，跳过")
     if not sub.ok:
         return IngestResult(episode_id="", note=sub.reason or "写入失败")
+    # 向量身份：pipeline 的写入契约没有 embed_model/embed_dim 字段，提交成功后就地补齐
+    if emb is not None:
+        stamp_episode_embedding(cfg, sub.item_id, embedder)
 
     result = IngestResult(episode_id=sub.item_id, salience=sub.salience, source=ext.source, note=ext.note)
 
@@ -265,10 +305,13 @@ def _resolve_fact(
     while f.predicate in EX._PREDICATE_ALIASES:
         f.predicate = EX._PREDICATE_ALIASES[f.predicate]
     # 事实也必须有向量，否则它在稠密召回里永远不存在——只能靠全文或图谱被捞到
+    # 降级期不写哈希伪向量（与 episode 口径一致）：留 NULL 等 embed_backfill 回算
     emb = None
-    if embedder is not None:
+    if embedder is not None and not getattr(embedder, "degraded", False):
         try:
             emb = embedder.embed_blob(f"{f.predicate} {f.obj}")
+            if getattr(embedder, "degraded", False):  # 本次调用把服务打挂了
+                emb = None
         except Exception:
             emb = None
     subj_norm = IDS.normalize(f.subject)
@@ -309,7 +352,7 @@ def _resolve_fact(
         # 状态类谓词：不同客体视为状态变更 → 旧条作废
         for r in rows:
             _invalidate(conn, r["id"], t_event, now, valid_to=vfrom)
-        new_id = _insert_fact(conn, session_id, subj_id, f, obj_ent, vfrom, ep_id, t_event, emb)
+        new_id = _insert_fact(conn, session_id, subj_id, f, obj_ent, vfrom, ep_id, t_event, emb, embedder=embedder)
         return {
             "action": "UPDATE",
             "fact": new_id,
@@ -323,7 +366,7 @@ def _resolve_fact(
         # 极性反转：旧条作废（保留原极性，历史不可篡改），新条另立
         for r in opposite:
             _invalidate(conn, r["id"], t_event, now, valid_to=vfrom)
-        new_id = _insert_fact(conn, session_id, subj_id, f, obj_ent, vfrom, ep_id, t_event, emb)
+        new_id = _insert_fact(conn, session_id, subj_id, f, obj_ent, vfrom, ep_id, t_event, emb, embedder=embedder)
         return {
             "action": "INVALIDATE",
             "fact": new_id,
@@ -332,7 +375,7 @@ def _resolve_fact(
             "predicate": f.predicate,
         }
 
-    new_id = _insert_fact(conn, session_id, subj_id, f, obj_ent, vfrom, ep_id, t_event, emb)
+    new_id = _insert_fact(conn, session_id, subj_id, f, obj_ent, vfrom, ep_id, t_event, emb, embedder=embedder)
 
     # 确定性兜底：位置/工作/关系类事实直接驱动状态槽。
     # 不能指望 LLM 记得产出 state_changes——它经常忘，而槽是检索的主干，
@@ -347,17 +390,19 @@ def _resolve_fact(
     return {"action": "ADD", "fact": new_id, "predicate": f.predicate}
 
 
-def _insert_fact(conn, session_id: str, subj_id: str, f: EX.FactCand, obj_ent, vfrom: float, ep_id: str, now: float, emb: bytes | None = None) -> str:
+def _insert_fact(conn, session_id: str, subj_id: str, f: EX.FactCand, obj_ent, vfrom: float, ep_id: str, now: float, emb: bytes | None = None, embedder=None) -> str:
     fid = IDS.fact_id(session_id, IDS.normalize(f.subject), f.predicate, f.obj, vfrom, f.polarity)
+    model_id, dim = embedding_identity(embedder) if emb is not None else (None, None)
     conn.execute(
         """INSERT OR IGNORE INTO fact
            (id,session_id,subject_id,predicate,object_text,object_entity_id,polarity,confidence,
-            t_valid_from,t_valid_to,t_ingest,t_invalid,status,source_episode,salience,embedding)
-           VALUES(?,?,?,?,?,?,?,?,?,NULL,?,NULL,'active',?,?,?)""",
+            t_valid_from,t_valid_to,t_ingest,t_invalid,status,source_episode,salience,embedding,
+            embed_model,embed_dim)
+           VALUES(?,?,?,?,?,?,?,?,?,NULL,?,NULL,'active',?,?,?,?,?)""",
         (
             fid, session_id, subj_id, f.predicate, f.obj, obj_ent,
             f.polarity, f.confidence, vfrom, now, ep_id,
-            min(1.0, 0.45 + 0.35 * f.confidence), emb,
+            min(1.0, 0.45 + 0.35 * f.confidence), emb, model_id, dim,
         ),
     )
     conn.execute(

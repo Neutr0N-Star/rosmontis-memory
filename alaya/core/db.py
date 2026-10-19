@@ -5,7 +5,7 @@
 
 WAL 与 synchronous 只在建库时设一次，不放在连接函数里。
 
-schema 版本：v3（A2 §3.3）。迁移纪律：
+schema 版本：v4（v3=A2 §3.3 状态机；v4=向量身份）。迁移纪律：
 - 只加列/加表，不改不删不重命名；
 - **单事务**：加列 → 回填 → 建表 → 补 backfill log → 写 user_version，一起 COMMIT；
 - 失败 ROLLBACK 保持原版本；重复执行安全（user_version 已到位就不再跑）。
@@ -29,7 +29,7 @@ _schema_cache: str | None = None
 _init_lock = threading.Lock()
 _local = threading.local()
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 # 与 alaya.core.gate.GATE_VERSION 保持一致（运行期从 gate 读取，这里是兜底常量）
 _FALLBACK_GATE_VERSION = "3.0.0"
@@ -160,6 +160,8 @@ def _migrate(conn: sqlite3.Connection, from_version: int) -> None:
             _migrate_v2(conn)
         if from_version < 3:
             _migrate_v3(conn, now)
+        if from_version < 4:
+            _migrate_v4(conn)
         conn.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         conn.execute("COMMIT")
     except Exception:
@@ -279,6 +281,16 @@ def _migrate_v3(conn: sqlite3.Connection, now: float) -> None:
     _backfill_episode(conn, now)
     _backfill_fact(conn)
     _backfill_state_log(conn, now)
+
+
+# ── v3 → v4：向量身份（只加列；旧数据 NULL = 未知身份，仍可用）──────────
+def _migrate_v4(conn: sqlite3.Connection) -> None:
+    for col, ddl in (
+        ("embed_model", "TEXT"),
+        ("embed_dim", "INTEGER"),
+    ):
+        _add(conn, "episode", col, ddl)
+        _add(conn, "fact", col, ddl)
 
 
 def _backfill_episode(conn: sqlite3.Connection, now: float) -> None:

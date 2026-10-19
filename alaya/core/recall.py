@@ -116,6 +116,37 @@ def _note_filtered(plan: dict | None, n: int = 1) -> None:
         plan["_filtered_by_state"] = int(plan.get("_filtered_by_state") or 0) + int(n)
 
 
+# ── 向量身份（v4）：检索只比同身份向量；NULL = 旧数据未知身份，仍可用 ──
+def _query_identity(cfg: Config, embedder: Embedder) -> tuple[str | None, int]:
+    model = str(
+        getattr(embedder, "model_id", "") or getattr(embedder, "model", "") or ""
+    ).strip()
+    return (model or None), int(getattr(cfg, "embed_dim", 0) or 0)
+
+
+def _identity_ok(row, model_id: str | None, dim: int, *, has_model: bool, has_dim: bool) -> bool:
+    """同身份才参与余弦；两列 NULL 的旧向量视为"未知身份"，保留可用。"""
+    if has_model:
+        m = _row_get(row, "embed_model")
+        m = str(m or "").strip()
+        if m and model_id and m != model_id:
+            return False
+    if has_dim:
+        raw = _row_get(row, "embed_dim")
+        try:
+            d = int(raw) if raw not in (None, "") else 0
+        except (TypeError, ValueError):
+            d = 0
+        if d and dim and d != dim:
+            return False
+    return True
+
+
+def _note_identity_skipped(plan: dict | None, n: int = 1) -> None:
+    if plan is not None and n > 0:
+        plan["_identity_skipped"] = int(plan.get("_identity_skipped") or 0) + int(n)
+
+
 def _marks(n: int) -> str:
     return ",".join("?" * n)
 
@@ -174,6 +205,7 @@ def _visible_keys(cfg: Config, keys: list[str], plan: dict | None = None) -> lis
 def _finalize_plan(plan: dict, cfg: Config) -> None:
     """把内部计数转成契约字段；只保留可审计的最终值。"""
     plan["filtered_by_state"] = int(plan.pop("_filtered_by_state", 0) or 0)
+    plan["identity_skipped"] = int(plan.pop("_identity_skipped", 0) or 0)
     plan["inbox_retrievable"] = bool(getattr(cfg, "inbox_retrievable", False))
 
 
@@ -480,6 +512,7 @@ def _gather(
     depth = REFLEX_DEPTH.get(str(plan.get("depth") or "context"), REFLEX_DEPTH["context"])
     seen: dict[str, SC.Candidate] = {}
     plan["_filtered_by_state"] = 0
+    plan["_identity_skipped"] = 0
     plan["inbox_retrievable"] = bool(getattr(cfg, "inbox_retrievable", False))
 
     _collect_states(cfg, sid, as_of, seen, plan)
@@ -611,14 +644,19 @@ def _dense(cfg: Config, embedder: Embedder, query: str, sid: str, as_of: float, 
     k = int(plan.get("_k_dense") or cfg.recall_k_dense)
     out: list[tuple[float, str]] = []
     hidden = 0
+    identity_skipped = 0
+    model_id, query_dim = _query_identity(cfg, embedder)
     has_state = _has_column(cfg, "episode", "state")
     window = int(getattr(cfg, "recall_dense_window", 20000) or 20000)
     sid_sql, sid_args = _sid_clause(sid)
     with DB.reader(cfg.db_path) as conn:
         for table, kind in (("fact", "fact"), ("episode", "episode")):
+            has_em = _has_column(cfg, table, "embed_model")
+            has_ed = _has_column(cfg, table, "embed_dim")
+            id_cols = (", embed_model" if has_em else "") + (", embed_dim" if has_ed else "")
             if table == "fact":
                 rows = conn.execute(
-                    f"""SELECT id, embedding FROM fact
+                    f"""SELECT id, embedding{id_cols} FROM fact
                         WHERE embedding IS NOT NULL
                           AND status!='invalidated' AND t_ingest <= ?{sid_sql}
                         ORDER BY t_ingest DESC LIMIT ?""",
@@ -628,7 +666,7 @@ def _dense(cfg: Config, embedder: Embedder, query: str, sid: str, as_of: float, 
                 # 状态过滤放在算完余弦之后用 Python 做，这样 filtered_by_state 能
                 # 统计"本来会被召回、但被可见性挡下"的条数；archived/muted 不再
                 # 在 SQL 里预过滤，口径与 sparse/graph/field 完全一致。
-                cols = "id, embedding, tier, archived, muted" + (", state" if has_state else "")
+                cols = "id, embedding, tier, archived, muted" + (", state" if has_state else "") + id_cols
                 rows = conn.execute(
                     f"""SELECT {cols} FROM episode
                         WHERE embedding IS NOT NULL
@@ -638,12 +676,19 @@ def _dense(cfg: Config, embedder: Embedder, query: str, sid: str, as_of: float, 
                 ).fetchall()
             if not rows:
                 continue
-            # 维度校验：一条旧模型的 512 维向量混进来会让整批 reshape 失败。
+            # 维度 + 身份校验：不同模型/维度的向量不参与余弦（NULL=未知身份仍可用）。
             # 坏行剔除并计数，不让全库检索废掉。
             need = cfg.embed_dim * 4
-            good_idx = [i for i, r in enumerate(rows) if r["embedding"] and len(r["embedding"]) == need]
+            good_idx = []
+            for i, r in enumerate(rows):
+                if not r["embedding"] or len(r["embedding"]) != need:
+                    continue
+                if not _identity_ok(r, model_id, query_dim, has_model=has_em, has_dim=has_ed):
+                    identity_skipped += 1
+                    continue
+                good_idx.append(i)
             if len(good_idx) != len(rows):
-                log.warning("dense: %d 条向量维度不符已跳过", len(rows) - len(good_idx))
+                log.warning("dense: %d 条向量维度/身份不符已跳过", len(rows) - len(good_idx))
             ids = [rows[i]["id"] for i in good_idx]
             blobs = [rows[i]["embedding"] for i in good_idx]
             vis = [(_episode_visible(cfg, rows[i]) if kind == "episode" else True) for i in good_idx]
@@ -660,6 +705,7 @@ def _dense(cfg: Config, embedder: Embedder, query: str, sid: str, as_of: float, 
                 out.append((float(sim), f"{kind}:{i}"))
 
     _note_filtered(plan, hidden)
+    _note_identity_skipped(plan, identity_skipped)
     out.sort(key=lambda x: x[0], reverse=True)
     return [rid for _, rid in out[:k]]
 
@@ -885,14 +931,26 @@ def _refine_cosine(cfg: Config, embedder: Embedder, query: str, seen: dict, dens
     ids = [i for i in want if i in seen]
     if not ids:
         return
+    model_id, query_dim = _query_identity(cfg, embedder)
+    has_em = _has_column(cfg, "episode", "embed_model")
+    has_ed = _has_column(cfg, "episode", "embed_dim")
+    id_cols = (", embed_model" if has_em else "") + (", embed_dim" if has_ed else "")
     placeholders = ",".join("?" * len(ids))
     with DB.reader(cfg.db_path) as conn:
-        rows = conn.execute(f"SELECT id, embedding FROM fact WHERE id IN ({placeholders})", ids).fetchall()
-        rows += conn.execute(f"SELECT id, embedding FROM episode WHERE id IN ({placeholders})", ids).fetchall()
+        rows = conn.execute(
+            f"SELECT id, embedding{id_cols} FROM fact WHERE id IN ({placeholders})", ids
+        ).fetchall()
+        rows += conn.execute(
+            f"SELECT id, embedding{id_cols} FROM episode WHERE id IN ({placeholders})", ids
+        ).fetchall()
+    need = cfg.embed_dim * 4
     for r in rows:
-        if r["embedding"] and r["id"] in seen:
-            sim = V.cosine(qv, r["embedding"], cfg.embed_dim)
-            seen[r["id"]].rel = max(0.0, sim)
+        if not r["embedding"] or len(r["embedding"]) != need or r["id"] not in seen:
+            continue
+        if not _identity_ok(r, model_id, query_dim, has_model=has_em, has_dim=has_ed):
+            continue
+        sim = V.cosine(qv, r["embedding"], cfg.embed_dim)
+        seen[r["id"]].rel = max(0.0, sim)
 
 
 # ── 阶段 4：预算打包（质量优先，三阶段）────────────────────────

@@ -87,8 +87,10 @@ def remember(
     emb = None
     if embedder is not None:
         try:
-            # 降级期不写哈希伪向量（I4：两入口一致）
-            emb = None if getattr(embedder, "degraded", False) else embedder.embed_blob(body)
+            # 降级期不写哈希伪向量（I4：两入口一致）：先算，算完再按 degraded 判定
+            blob = getattr(embedder, "embed_blob", None)
+            blob = blob(body) if blob is not None else None
+            emb = None if getattr(embedder, "degraded", False) else blob
         except Exception:
             emb = None
 
@@ -115,6 +117,10 @@ def remember(
         return {"ok": True, "id": sub.item_id, "duplicate": True, "tier": sub.tier, "state": sub.state}
     if not sub.ok:
         return {"ok": False, "reason": sub.reason}
+    if emb is not None:
+        from . import write as WR  # 延迟导入：write → pipeline，避免模块环
+
+        WR.stamp_episode_embedding(cfg, sub.item_id, embedder)
 
     return {
         "ok": True,

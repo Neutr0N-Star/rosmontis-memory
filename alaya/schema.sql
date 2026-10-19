@@ -1,7 +1,8 @@
--- 藏识 Alaya schema v3（特化版：面向长期陪伴 AI 的人格记忆）
+-- 藏识 Alaya schema v4（特化版：面向长期陪伴 AI 的人格记忆）
 -- 时间统一 epoch 秒（REAL）。物理删除只发生在 tombstone 明确记录之后。
 -- v3 只加列/加表（A2 §3.3）：episode 的 origin/state/state_at/gate_version、
 -- fact 的 origin/archived、item_state_log；旧列保留为兼容投影，不删不改。
+-- v4 只加列：episode/fact 的 embed_model/embed_dim（向量身份；NULL = 旧数据未知身份）。
 
 PRAGMA journal_mode = WAL;
 PRAGMA synchronous = NORMAL;
@@ -76,7 +77,10 @@ CREATE TABLE IF NOT EXISTS episode (
     origin         TEXT,
     state          TEXT,
     state_at       REAL,                        -- 最近一次状态转移时间
-    gate_version   TEXT                         -- 最近一次过闸的 gate 版本
+    gate_version   TEXT,                        -- 最近一次过闸的 gate 版本
+    -- v4：向量身份（写入时记录；旧数据 NULL = 未知身份，仍可用，不得报错）
+    embed_model    TEXT,
+    embed_dim      INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_ep_state        ON episode(session_id, state, muted);
 CREATE INDEX IF NOT EXISTS idx_ep_session_time ON episode(session_id, t_event);
@@ -135,7 +139,10 @@ CREATE TABLE IF NOT EXISTS fact (
     superseded_by     TEXT,
     -- v3：来源与归档（事实永久、只换状态；C3 归档阈值更低，由 forget 执行）
     origin            TEXT,
-    archived          INTEGER NOT NULL DEFAULT 0
+    archived          INTEGER NOT NULL DEFAULT 0,
+    -- v4：向量身份（旧数据 NULL = 未知身份，仍可用）
+    embed_model       TEXT,
+    embed_dim         INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_fact_sp     ON fact(session_id, subject_id, predicate, status);
 CREATE INDEX IF NOT EXISTS idx_fact_valid  ON fact(t_valid_from, t_valid_to);

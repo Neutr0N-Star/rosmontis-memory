@@ -150,6 +150,9 @@ class Config:
     # Embedding
     embed_provider: str = field(default_factory=lambda: _env("ALAYA_EMBED", "ollama"))
     embed_model: str = field(default_factory=lambda: _env("ALAYA_EMBED_MODEL", "bge-m3:latest"))
+    # 向量身份：写进 episode/fact.embed_model 的稳定标识。默认=模型名；
+    # 换 embedding 档位（512/1024）或换渠道时显式设置，避免旧向量被静默混用。
+    embed_model_id: str = field(default_factory=lambda: _env("ALAYA_EMBED_MODEL_ID", ""))
     embed_dim: int = field(default_factory=lambda: _envi("ALAYA_EMBED_DIM", 1024))
     ollama_url: str = field(default_factory=lambda: _env("ALAYA_OLLAMA", "http://127.0.0.1:11434"))
     embed_timeout: float = field(default_factory=lambda: _envf("ALAYA_EMBED_TIMEOUT", 8.0))
@@ -197,6 +200,11 @@ class Config:
     use_llm_resolve: bool = field(default_factory=lambda: _envb("ALAYA_LLM_RESOLVE", False))
     auto_forget: bool = field(default_factory=lambda: _envb("ALAYA_AUTO_FORGET", True))
     log_level: str = field(default_factory=lambda: _env("ALAYA_LOG", "INFO"))
+
+    def __post_init__(self) -> None:
+        # embed_model_id 缺省回落到模型名（模型安装器线可显式覆盖）
+        if not (self.embed_model_id or "").strip():
+            self.embed_model_id = self.embed_model
 
     def as_dict(self) -> dict:
         d = {k: v for k, v in self.__dict__.items() if k not in ("weights", "budget", "policy", "openai_key")}

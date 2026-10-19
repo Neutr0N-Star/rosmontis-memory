@@ -41,8 +41,12 @@ KIND_DREAM = "dream"
 KIND_SETTLE = "settle"
 KIND_FORGET = "forget"
 KIND_BACKFILL = "backfill"
+KIND_EMBED_BACKFILL = "embed_backfill"
 KIND_TICK = "tick"
-KINDS = (KIND_ENRICH, KIND_REVIEW, KIND_DREAM, KIND_SETTLE, KIND_FORGET, KIND_BACKFILL, KIND_TICK)
+KINDS = (
+    KIND_ENRICH, KIND_REVIEW, KIND_DREAM, KIND_SETTLE, KIND_FORGET,
+    KIND_BACKFILL, KIND_EMBED_BACKFILL, KIND_TICK,
+)
 
 DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_LEASE_SECONDS = 300.0
@@ -371,6 +375,37 @@ def requeue_stale(cfg, *, now: float | None = None) -> dict:
 
 
 # ── 执行器（daemon 与 HTTP 共用）──────────────────────────────
+# 这些 kind 执行完顺手检查一次 NULL 向量，并把 embed_backfill 排到下一拍，
+# daemon 起来后无需人工触发就能把降级期写下的条目补齐（C4）。
+_AUTO_BACKFILL_AFTER = frozenset({KIND_SETTLE, KIND_TICK, KIND_FORGET, KIND_REVIEW})
+
+
+def _maybe_enqueue_embed_backfill(mem, now: float | None = None) -> dict | None:
+    """语义模式 + 有 NULL 向量时，幂等投递一个 embed_backfill job。"""
+    try:
+        cfg = getattr(mem, "cfg", None)
+        emb = getattr(mem, "embedder", None)
+        if cfg is None or emb is None:
+            return None
+        if getattr(emb, "provider", "") in ("hash", "none"):
+            return None
+        if bool(getattr(emb, "degraded", False)):
+            return None
+        if hasattr(emb, "vector_mode") and emb.vector_mode() != "semantic":
+            return None
+        pending = int(mem.pending_backfill()) if hasattr(mem, "pending_backfill") else 0
+        if pending <= 0:
+            return None
+        now = _now(now)
+        return enqueue(
+            cfg, KIND_EMBED_BACKFILL, "*",
+            next_run=now, bucket=int(now // 60), now=now,
+        )
+    except Exception as e:  # 自动调度失败不影响主 job
+        log.debug("auto enqueue embed_backfill failed: %s", e)
+        return None
+
+
 def execute_job(mem, job: dict, *, now: float | None = None) -> dict:
     """按 kind 执行一个已抢占的 job。异常向上抛，由调用方 `fail()` 记录。"""
     kind = str(job.get("kind") or "").strip().lower()
@@ -396,10 +431,17 @@ def execute_job(mem, job: dict, *, now: float | None = None) -> dict:
             llm=getattr(mem, "llm_hot", None),
         )
         out["result"] = res.to_dict() if hasattr(res, "to_dict") else res
+    elif kind == KIND_EMBED_BACKFILL:
+        sid = "" if target in ("", "*") else target
+        out["result"] = mem.backfill_embeddings(session_id=sid or None, now=now)
     elif kind == KIND_BACKFILL:
         out["result"] = {"skipped": True, "reason": "backfill 未实现（后续 W）"}
     else:
         raise ValueError(f"未知 job kind：{kind or '(空)'}")
+    if kind in _AUTO_BACKFILL_AFTER:
+        auto = _maybe_enqueue_embed_backfill(mem, now)
+        if auto is not None:
+            out["enqueued"] = {"kind": KIND_EMBED_BACKFILL, "job_id": auto.get("job_id"), "created": auto.get("created")}
     return out
 
 
@@ -503,7 +545,8 @@ def idem_release(cfg, scope: str, key: str) -> None:
 
 __all__ = [
     "KINDS", "STATUSES",
-    "KIND_ENRICH", "KIND_REVIEW", "KIND_DREAM", "KIND_SETTLE", "KIND_FORGET", "KIND_BACKFILL", "KIND_TICK",
+    "KIND_ENRICH", "KIND_REVIEW", "KIND_DREAM", "KIND_SETTLE", "KIND_FORGET",
+    "KIND_BACKFILL", "KIND_EMBED_BACKFILL", "KIND_TICK",
     "STATUS_PENDING", "STATUS_RUNNING", "STATUS_DONE", "STATUS_FAILED", "STATUS_DEAD",
     "idle_timeout_from_env", "idempotency_ttl_from_env",
     "make_job_id", "enqueue", "get", "list_jobs", "counts", "due_count", "summary",

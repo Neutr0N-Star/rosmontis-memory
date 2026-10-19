@@ -1,4 +1,4 @@
-"""统一写入管线 / 状态机 / schema v3 迁移的验收测试。
+﻿"""统一写入管线 / 状态机 / schema v3 迁移的验收测试。
 
 运行：`PYTHONIOENCODING=utf-8 python tests/test_items.py`
 不依赖 Ollama / 网络；迁移测试只用临时副本库，真库 `alaya.db` 全程只读。
@@ -525,7 +525,7 @@ class TestMigration(unittest.TestCase):
     def test_v2_to_v3_backfill(self):
         DB.init_db(self.path)
         conn = DB.connect(self.path)
-        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 3)
+        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], DB.SCHEMA_VERSION)
         cols = {r[1] for r in conn.execute("PRAGMA table_info(episode)")}
         self.assertTrue({"origin", "state", "state_at", "gate_version"} <= cols)
         fcols = {r[1] for r in conn.execute("PRAGMA table_info(fact)")}
@@ -568,7 +568,7 @@ class TestMigration(unittest.TestCase):
         DB.close_thread_conns()
         DB.init_db(self.path)
         conn = DB.connect(self.path)
-        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 3)
+        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], DB.SCHEMA_VERSION)
         self.assertEqual(conn.execute("SELECT COUNT(*) FROM episode").fetchone()[0], before["ep"])
         self.assertEqual(conn.execute("SELECT COUNT(*) FROM item_state_log").fetchone()[0], before["log"])
         self.assertEqual(conn.execute("SELECT state_at FROM episode WHERE id='ep_nb'").fetchone()[0], before["state_at"])
@@ -638,7 +638,7 @@ class TestMigration(unittest.TestCase):
         DB.init_db(copy)
         conn = DB.connect(copy)
         try:
-            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 3)
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], DB.SCHEMA_VERSION)
             for table, n in counts_before.items():
                 self.assertEqual(conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0], n, table)
             n_ep = conn.execute("SELECT COUNT(*) FROM episode").fetchone()[0]

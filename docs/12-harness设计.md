@@ -133,14 +133,27 @@ harness 把这些固化下来，接入方只需要：把用户说的话交给它
 
 ## 5. 交付形态
 
-| 文件 | 内容 |
-|---|---|
-| `alaya/harness.py` | `Harness` 类：wake / turn / sleep / tick |
-| `alaya/tools.py` | 五个工具的 JSON schema + 统一 dispatcher |
-| `demo/harness_demo.py` | 可运行的完整对话演示（mock LLM，不依赖任何模型） |
-| `docs/12-harness设计.md` | 本文 |
+| 成分 | 位置 | 定位 |
+|---|---|---|
+| `build_context` / `render_system` / `fit_memory_text` | `harness.py` 模块级 | **契约本体**：注入、预算硬闸；`Handle.context` 与 `/v1/context` 直接用它，不经过类 |
+| 工具调用归一化 / 响应解析 / `chat_with_tools` / `make_llm_callable` | `harness.py` 模块级 | 协议适配，可复用 |
+| `Harness` 类（wake / turn / sleep / tick） | `harness.py` | **参考编排器**：可整体替换；宿主自管循环时不必使用 |
+| `dispatch` | `tools.py` | **契约本体**：工具执行 |
+| `alaya/harness_demo.py` 与 `examples/hooks_demo.py` | 仓库内 | 可运行示例（假模型，不依赖网络） |
 
 `Harness` 不绑定任何 LLM SDK——它接收一个 `llm_callable(messages, tools) -> response`，你可以塞 OpenAI、Ollama、DeepSeek 或一个假模型进去。
+
+### 5.1 替换编排器时要继承的决定
+
+类可以换，下面这些是踩过坑之后定下来的，换实现时要么继承、要么重新回答：
+
+1. 空回复必须抛错，不能当正常回复写进记忆；
+2. 工具轮上限 3，超限后带已有结果再收一次尾；
+3. 工具失败原因必须回灌给模型，不吞；
+4. 纯函数注入时静音检索日志，不污染访问计数；
+5. 预算硬闸按整行丢弃，绝不截半句；
+6. 流式断连不写半截 assistant 记忆；
+7. 结算三步各自隔离，峰终失败不连累做梦。
 
 ## 6. 接入方最少要写多少代码
 

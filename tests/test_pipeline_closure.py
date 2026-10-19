@@ -120,8 +120,13 @@ class TestFullRepoScan(unittest.TestCase):
             for path in root.rglob("*.py"):
                 if "__pycache__" in path.parts:
                     continue
+                rel = path.relative_to(ROOT).as_posix()
+                if rel.startswith("bench/_profile/"):
+                    # 性能剖析脚手架故意旁路管线批量造库（一次性、不进产品路径）；
+                    # 唯一写入点保证只针对产品代码与正式工具，此处显式豁免。
+                    continue
                 if INSERT_EPISODE_RE.search(path.read_text(encoding="utf-8")):
-                    hits.add(path.relative_to(ROOT).as_posix())
+                    hits.add(rel)
         self.assertEqual(
             hits,
             {"alaya/core/pipeline.py"},

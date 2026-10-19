@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "alaya-memory"
+version = "1.0.0"
+description = "藏识 Alaya — 长期陪伴 AI 的记忆器官：五层记忆投影、预算约束检索、语义场、主被动一体记忆"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "TBD" }
+authors = [{ name = "MyHub" }]
+keywords = ["memory", "llm", "agent", "long-term-memory", "sqlite"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Operating System :: OS Independent",
+]
+dependencies = []
+
+[project.optional-dependencies]
+# 核心只用标准库；numpy 为可选的向量加速，缺失时走纯 Python 兜底
+numpy = ["numpy>=1.24"]
+# HTTP 服务形态（alaya serve）
+serve = ["fastapi>=0.110", "uvicorn>=0.27", "pydantic>=2", "jieba>=0.42"]
+# 本地开发与评测
+dev = ["numpy>=1.24", "fastapi>=0.110", "uvicorn>=0.27", "pydantic>=2", "jieba>=0.42"]
+
+[project.scripts]
+alaya = "alaya.cli:main"
+
+[project.urls]
+Documentation = "https://example.invalid/alaya"
+
+[tool.setuptools.packages.find]
+include = ["alaya*"]
+
+[tool.setuptools.package-data]
+alaya = ["schema.sql"]

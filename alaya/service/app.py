@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -233,10 +234,23 @@ def get_mem() -> Memory:
 
 
 def create_app() -> FastAPI:
+    @asynccontextmanager
+    async def _lifespan(_app):
+        """生命周期：关停时把在途后台任务收尾，别让 enrich/settle 线程被硬杀。"""
+        yield
+        try:
+            h = _harness
+            if h is not None and hasattr(h, "join"):
+                h.join(timeout=5.0)
+                log.info("shutdown: 后台任务已收尾")
+        except Exception as e:  # 关停路径不抛错，只记日志
+            log.warning("shutdown join failed: %s", e)
+
     app = FastAPI(
         title="藏识 Alaya",
         version="1.0.0",
         description="长期陪伴 AI 的记忆器官：五层记忆 + 三轴 + 预算约束检索",
+        lifespan=_lifespan,
     )
     app.add_middleware(
         CORSMiddleware,
@@ -573,8 +587,17 @@ def create_app() -> FastAPI:
     # ── 上下文编译 ────────────────────────────────────────
     @app.post("/v1/context", tags=["上下文"])
     def post_context(body: ContextIn):
-        """一次调用拿全：人格 + 常驻 + 检索。每轮对话前调一次即完成热重载。"""
-        return ok(get_mem().build_context(body.query, body.session_id, body.budget, body.as_of))
+        """一次调用拿全：人格 + 常驻 + 检索。
+
+        与库层 `Handle.context` 走**同一条纯函数路径**：不写库、绝不超预算。
+        （此前直接调 `Memory.build_context`，实测会写 retrieval_log 且 72 > budget 60。）
+        """
+        from ..harness import build_context as _build_context_pure
+
+        ctx = _build_context_pure(
+            get_mem(), body.query, body.session_id, body.budget, body.as_of, pure=True
+        )
+        return ok(ctx)
 
     # ── 维护 ──────────────────────────────────────────────
     @app.post("/v1/forget/run", tags=["维护"])
@@ -659,7 +682,48 @@ def create_app() -> FastAPI:
 
     @app.get("/health", include_in_schema=False)
     def health():
+        """兼容旧探针：只表示进程活着。"""
         return {"ok": True, "ts": time.time()}
+
+    @app.get("/healthz", include_in_schema=False)
+    def healthz():
+        """存活探针（liveness）：进程在、事件循环能响应即算活。"""
+        return {"ok": True, "ts": time.time()}
+
+    @app.get("/readyz", include_in_schema=False)
+    def readyz():
+        """就绪探针（readiness）：库可读 + schema 版本已知 + 降级状态可见。
+
+        503 表示不该把流量打进来（库打不开 / schema 未知）；降级（无模型、哈希向量）
+        不影响就绪，但会出现在 degraded 里，方便运维一眼看到。
+        """
+        checks: dict[str, Any] = {}
+        ok = True
+        try:
+            mem = get_mem()
+            import sqlite3
+
+            conn = sqlite3.connect(f"file:{mem.cfg.db_path}?mode=ro", uri=True)
+            try:
+                uv = conn.execute("PRAGMA user_version").fetchone()[0]
+                ep = conn.execute("SELECT COUNT(*) FROM episode").fetchone()[0]
+            finally:
+                conn.close()
+            checks["db"] = {"ok": True, "user_version": uv, "episode": ep}
+        except Exception as e:
+            ok = False
+            checks["db"] = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+        try:
+            st = get_mem().stats()
+            checks["providers"] = {
+                "ok": True,
+                "degraded": bool(st.get("degraded")),
+                "stats": st,
+            }
+        except Exception as e:
+            checks["providers"] = {"ok": False, "error": type(e).__name__}
+        body = {"ok": ok, "data": {"version": "1.0.0", "checks": checks}}
+        return JSONResponse(body, status_code=200 if ok else 503)
 
     return app
 

@@ -24,6 +24,15 @@ sys.path.insert(0, str(ROOT))
 import alaya  # noqa: E402
 from alaya.core import db as DB  # noqa: E402
 
+# Windows 默认控制台是 GBK，中文与箭头符号会直接抛 UnicodeEncodeError。
+# 示例要能在「双击运行 / 无 PYTHONIOENCODING」的情况下跑通，所以这里自己做一次兜底。
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
 
 class FakeLLM:
     """假模型：第一轮发起一次工具调用，拿到工具结果后正常收尾。

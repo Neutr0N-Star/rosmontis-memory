@@ -9,12 +9,13 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,6 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from ..config import Config
+from ..core import jobs
 from ..core.memory import Memory
 from ..tools import item_state as _item_state
 from ..tools import transition_item
@@ -33,6 +35,53 @@ WEB_DIR = Path(__file__).resolve().parents[2] / "web"
 
 _mem: Memory | None = None
 _harness = None
+
+# HTTP /v1/settle 的后台 job 线程：lifespan 关停时要 join，不能硬杀。
+_job_threads: set[threading.Thread] = set()
+_job_threads_lock = threading.Lock()
+
+
+def _write_shutdown_marker(payload: dict) -> None:
+    """测试/运维用：设置 ALAYA_SHUTDOWN_MARKER 后，优雅关停时落标记文件。"""
+    path = (os.environ.get("ALAYA_SHUTDOWN_MARKER") or "").strip()
+    if not path:
+        return
+    try:
+        Path(path).write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    except Exception as e:  # pragma: no cover - 关停路径不抛
+        log.warning("shutdown marker write failed: %s", e)
+
+
+def _run_job_once(job_id: str, mem: Memory) -> None:
+    """抢到并执行一个指定 job（HTTP /v1/settle 的立即线程用）。"""
+    cfg = mem.cfg
+    claimed = jobs.claim_job(cfg, job_id, owner=f"service:{os.getpid()}", now=time.time())
+    if not claimed:
+        return
+    try:
+        jobs.execute_job(mem, claimed)
+    except Exception as e:
+        jobs.fail(cfg, job_id, e)
+        log.warning("job %s failed: %s: %s", job_id, type(e).__name__, e)
+    else:
+        jobs.finish(cfg, job_id)
+
+
+def _start_job_thread(job_id: str, mem: Memory) -> threading.Thread:
+    """后台跑一个 job；线程登记在 lifespan 的 join 表里。"""
+
+    def _worker() -> None:
+        try:
+            _run_job_once(job_id, mem)
+        finally:
+            with _job_threads_lock:
+                _job_threads.discard(threading.current_thread())
+
+    t = threading.Thread(target=_worker, daemon=True, name=f"alaya-job-{job_id[:8]}")
+    with _job_threads_lock:
+        _job_threads.add(t)
+    t.start()
+    return t
 
 
 _META_PREFIX = __import__("re").compile(r"^[（(][^）)]{0,24}[）)]\s*")
@@ -161,6 +210,7 @@ class EpisodeIn(BaseModel):
     session_id: str = "default"
     role: str = "user"
     t_event: float | None = None
+    idempotency_key: str | None = Field(None, description="等价于 Idempotency-Key 头")
 
 
 class RecallIn(BaseModel):
@@ -212,6 +262,23 @@ class ContextIn(BaseModel):
 class TurnIn(BaseModel):
     text: str
     session_id: str = "default"
+    idempotency_key: str | None = Field(None, description="等价于 Idempotency-Key 头")
+
+
+class SettleIn(BaseModel):
+    """POST /v1/settle：打烊（立即返回 job_id，后台执行）。"""
+
+    session_id: str = "default"
+    idempotency_key: str | None = Field(None, description="等价于 Idempotency-Key 头")
+
+
+class ObserveIn(BaseModel):
+    """POST /v1/observe：宿主自管循环时回写一来一回（异步落库，立即返回）。"""
+
+    session_id: str
+    user_text: str = ""
+    assistant_text: str = ""
+    idempotency_key: str | None = Field(None, description="等价于 Idempotency-Key 头")
 
 
 class StreamIn(BaseModel):
@@ -243,8 +310,9 @@ def get_mem() -> Memory:
 def create_app() -> FastAPI:
     @asynccontextmanager
     async def _lifespan(_app):
-        """生命周期：关停时把在途后台任务收尾，别让 enrich/settle 线程被硬杀。"""
+        """生命周期：关停时把在途后台任务收尾，别让 enrich/settle/job 线程被硬杀。"""
         yield
+        joined_jobs = 0
         try:
             h = _harness
             if h is not None and hasattr(h, "join"):
@@ -252,6 +320,24 @@ def create_app() -> FastAPI:
                 log.info("shutdown: 后台任务已收尾")
         except Exception as e:  # 关停路径不抛错，只记日志
             log.warning("shutdown join failed: %s", e)
+        try:
+            with _job_threads_lock:
+                threads = list(_job_threads)
+            for t in threads:
+                t.join(timeout=5.0)
+                joined_jobs += 1
+            if joined_jobs:
+                log.info("shutdown: %d 个 job 线程已收尾", joined_jobs)
+        except Exception as e:
+            log.warning("shutdown job join failed: %s", e)
+        _write_shutdown_marker(
+            {
+                "shutdown": True,
+                "harness_joined": _harness is not None,
+                "job_threads_joined": joined_jobs,
+                "at": time.time(),
+            }
+        )
 
     app = FastAPI(
         title="藏识 Alaya",
@@ -337,16 +423,54 @@ def create_app() -> FastAPI:
             status_code=status,
         )
 
+    # ── 幂等键（Idempotency-Key）：24h 内同键返回首次响应 ──────
+    def _idempotent(scope: str, key: Any, handler):
+        """包一层显式幂等。key 非 str（直调测试时的 Header 默认对象）视为未传。"""
+        if not isinstance(key, str) or not key.strip():
+            return handler()
+        cfg = get_mem().cfg
+        state, cached = jobs.idem_begin(cfg, scope, key)
+        if state == "invalid":
+            return fail("invalid_idempotency_key", "Idempotency-Key 需为 1-200 字符", 400)
+        if state == "hit" and cached is not None:
+            return JSONResponse(
+                cached["body"], status_code=int(cached.get("status_code") or 200),
+                headers={"X-Idempotent-Replay": "1"},
+            )
+        if state == "busy":
+            return fail(
+                "idempotency_in_progress",
+                "同一 Idempotency-Key 正在处理，请稍后重试", 409, retryable=True,
+            )
+        try:
+            resp = handler()
+        except Exception:
+            jobs.idem_release(cfg, scope, key)
+            raise
+        try:
+            body = json.loads(resp.body.decode("utf-8"))
+            jobs.idem_store(cfg, scope, key, resp.status_code, body)
+        except Exception as e:  # 缓存失败不能影响首次响应
+            log.warning("idempotency store failed: %s", e)
+        return resp
+
     # ── 写 ────────────────────────────────────────────────
     @app.post("/v1/episodes", tags=["写入"])
-    def post_episode(body: EpisodeIn):
-        if not body.text.strip():
-            return fail("empty_text", "text 不能为空")
-        try:
-            return ok(get_mem().ingest_async(body.text, body.session_id, body.role, body.t_event))
-        except Exception as e:  # pragma: no cover
-            log.exception("ingest failed")
-            return fail("ingest_failed", str(e), 500)
+    def post_episode(
+        body: EpisodeIn,
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        def _do():
+            if not body.text.strip():
+                return fail("empty_text", "text 不能为空")
+            try:
+                return ok(get_mem().ingest_async(body.text, body.session_id, body.role, body.t_event))
+            except Exception as e:  # pragma: no cover
+                log.exception("ingest failed")
+                return fail("ingest_failed", str(e), 500)
+
+        key = idempotency_key if isinstance(idempotency_key, str) else None
+        return _idempotent("POST:/v1/episodes", key or body.idempotency_key, _do)
 
     @app.post("/v1/episodes/batch", tags=["写入"])
     def post_batch(items: list[EpisodeIn]):
@@ -480,22 +604,67 @@ def create_app() -> FastAPI:
 
     # ── Harness：一轮对话 ─────────────────────────────────
     @app.post("/v1/turn", tags=["Harness"])
-    def post_turn(body: TurnIn):
-        """一轮对话：记录 → 组上下文 → 调模型 → 写回。"""
-        if not (body.text or "").strip():
-            return fail("empty_text", "说的是空的，她没法接话", 422)
-        if not body.session_id:
-            return fail("missing_session", "session_id 不能为空", 422)
-        try:
-            return ok(get_harness().turn(body.text, body.session_id))
-        except ValueError as e:
-            return fail("invalid_argument", str(e), 422)
-        except RuntimeError as e:
-            # 模型侧问题：明确告诉前端可以重试，不要伪装成成功
-            return fail("llm_unavailable", f"模型没给出回复：{e}", 503)
-        except Exception as e:
-            log.exception("turn failed")
-            return fail("turn_failed", f"{type(e).__name__}: {e}", 500)
+    def post_turn(
+        body: TurnIn,
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        """一轮对话：记录 → 组上下文 → 调模型 → 写回。支持 Idempotency-Key。"""
+
+        def _do():
+            if not (body.text or "").strip():
+                return fail("empty_text", "说的是空的，她没法接话", 422)
+            if not body.session_id:
+                return fail("missing_session", "session_id 不能为空", 422)
+            try:
+                return ok(get_harness().turn(body.text, body.session_id))
+            except ValueError as e:
+                return fail("invalid_argument", str(e), 422)
+            except RuntimeError as e:
+                # 模型侧问题：明确告诉前端可以重试，不要伪装成成功
+                return fail("llm_unavailable", f"模型没给出回复：{e}", 503)
+            except Exception as e:
+                log.exception("turn failed")
+                return fail("turn_failed", f"{type(e).__name__}: {e}", 500)
+
+        return _idempotent(
+            "POST:/v1/turn",
+            idempotency_key if isinstance(idempotency_key, str) else body.idempotency_key,
+            _do,
+        )
+
+    @app.post("/v1/observe", tags=["Harness"])
+    def post_observe(
+        body: ObserveIn,
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        """回写一来一回（宿主自管循环的 post_turn 钩子）：异步落库、立即返回。
+
+        两个字段至少给一个；空字符串忽略；都给则各写一条 user / assistant episode。
+        返回 `{queued: true, episode_ids: [...]}`（按 user、assistant 顺序）。
+        """
+
+        def _do():
+            sid = _no_wildcard((body.session_id or "").strip())
+            if not (body.session_id or "").strip():
+                return fail("missing_session", "session_id 必填", 422)
+            user_text = (body.user_text or "").strip()
+            assistant_text = (body.assistant_text or "").strip()
+            if not user_text and not assistant_text:
+                return fail("empty_text", "user_text 与 assistant_text 至少给一个", 422)
+            mem = get_mem()
+            episode_ids: list[str] = []
+            if user_text:
+                r = mem.ingest_async(user_text, session_id=sid, role="user")
+                if r.get("episode_id"):
+                    episode_ids.append(r["episode_id"])
+            if assistant_text:
+                r = mem.ingest_async(assistant_text, session_id=sid, role="assistant")
+                if r.get("episode_id"):
+                    episode_ids.append(r["episode_id"])
+            return ok({"queued": True, "episode_ids": episode_ids})
+
+        key = idempotency_key if isinstance(idempotency_key, str) else None
+        return _idempotent("POST:/v1/observe", key or body.idempotency_key, _do)
 
     @app.post("/v1/turn/stream", tags=["Harness"])
     def post_turn_stream(body: StreamIn):
@@ -538,6 +707,61 @@ def create_app() -> FastAPI:
     @app.post("/v1/session/sleep", tags=["Harness"])
     def post_sleep(session_id: str = "default"):
         return ok(get_harness().sleep(session_id))
+
+    # ── 节拍 / 任务运维（C2）──────────────────────────────
+    @app.post("/v1/settle", tags=["Harness"])
+    def post_settle(
+        body: SettleIn | None = None,
+        session_id: str = "default",
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        """打烊：立即返回 job_id，峰终结算 + 整理 + 做梦在后台跑（不阻塞调用方）。
+
+        兼容三种传 session 的写法：body `{"session_id"}`、query `?session_id=`、缺省 default。
+        """
+
+        def _do():
+            raw_sid = (
+                body.session_id
+                if body is not None and body.session_id
+                else (session_id or "default")
+            )
+            sid = _no_wildcard(raw_sid or "default")
+            mem = get_mem()
+            cfg = mem.cfg
+            now = time.time()
+            job = jobs.enqueue(
+                cfg, jobs.KIND_SETTLE, sid, next_run=now, bucket=int(now), now=now
+            )
+            queued = False
+            if job.get("status") in (jobs.STATUS_PENDING, jobs.STATUS_FAILED):
+                _start_job_thread(job["job_id"], mem)
+                queued = True
+            return ok(
+                {
+                    "job_id": job["job_id"],
+                    "session_id": sid,
+                    "status": job.get("status"),
+                    "queued": queued,
+                }
+            )
+
+        key = idempotency_key if isinstance(idempotency_key, str) else None
+        return _idempotent(
+            "POST:/v1/settle", key or (body.idempotency_key if body is not None else None), _do
+        )
+
+    @app.get("/v1/jobs", tags=["运维"])
+    def get_jobs(status: str | None = None, limit: int = Query(50, le=500)):
+        """任务积压：各状态计数 + 最近 job 列表（运维/守护进程观测用）。"""
+        cfg = get_mem().cfg
+        now = time.time()
+        return ok(
+            {
+                "summary": jobs.summary(cfg, now=now),
+                "jobs": jobs.list_jobs(cfg, status=status, limit=limit),
+            }
+        )
 
     @app.get("/v1/settings", tags=["设置"])
     def get_settings():

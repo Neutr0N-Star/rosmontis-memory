@@ -91,6 +91,37 @@ def _ensure_perf_indexes(conn: sqlite3.Connection) -> None:
             log.warning("perf index failed (%s): %s", sql, e)
 
 
+# ── jobs 表（docs/15 §3.5）：后台节拍/重放任务 ──────────────────
+# 用 IF NOT EXISTS 幂等补，老库升级不改 user_version；失败只告警不阻塞启动。
+# 本文件只新增这一组与 jobs 相关的语句（C2 契约），不参与其它迁移逻辑。
+_JOB_TABLE_STATEMENTS = (
+    """CREATE TABLE IF NOT EXISTS job (
+        id           TEXT PRIMARY KEY,
+        kind         TEXT NOT NULL,
+        target       TEXT NOT NULL,
+        status       TEXT NOT NULL,
+        attempts     INTEGER NOT NULL DEFAULT 0,
+        max_attempts INTEGER NOT NULL DEFAULT 3,
+        next_run     REAL NOT NULL,
+        lease_owner  TEXT,
+        leased_until REAL,
+        last_error   TEXT,
+        created_at   REAL NOT NULL,
+        updated_at   REAL NOT NULL
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_job_due ON job(status, next_run)",
+    "CREATE INDEX IF NOT EXISTS idx_job_lease ON job(status, leased_until)",
+)
+
+
+def _ensure_job_table(conn: sqlite3.Connection) -> None:
+    for sql in _JOB_TABLE_STATEMENTS:
+        try:
+            conn.execute(sql)
+        except sqlite3.Error as e:
+            log.warning("job table init failed: %s", e)
+
+
 def init_db(db_path: str) -> None:
     with _init_lock:
         conn = connect(db_path)
@@ -106,6 +137,7 @@ def init_db(db_path: str) -> None:
         if version < SCHEMA_VERSION:
             _migrate(conn, version)
         _ensure_perf_indexes(conn)
+        _ensure_job_table(conn)
 
         row = conn.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()
         if row is None:

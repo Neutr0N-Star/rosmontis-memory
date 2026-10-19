@@ -13,6 +13,24 @@
         ],
         "summary": "Post Episode",
         "operationId": "post_episode_v1_episodes_post",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -969,17 +987,93 @@
           "Harness"
         ],
         "summary": "Post Turn",
-        "description": "一轮对话：记录 → 组上下文 → 调模型 → 写回。",
+        "description": "一轮对话：记录 → 组上下文 → 调模型 → 写回。支持 Idempotency-Key。",
         "operationId": "post_turn_v1_turn_post",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/TurnIn"
               }
             }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
           },
-          "required": true
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/observe": {
+      "post": {
+        "tags": [
+          "Harness"
+        ],
+        "summary": "Post Observe",
+        "description": "回写一来一回（宿主自管循环的 post_turn 钩子）：异步落库、立即返回。\n\n两个字段至少给一个；空字符串忽略；都给则各写一条 user / assistant episode。\n返回 `{queued: true, episode_ids: [...]}`（按 user、assistant 顺序）。",
+        "operationId": "post_observe_v1_observe_post",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ObserveIn"
+              }
+            }
+          }
         },
         "responses": {
           "200": {
@@ -1100,6 +1194,140 @@
               "type": "string",
               "default": "default",
               "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/settle": {
+      "post": {
+        "tags": [
+          "Harness"
+        ],
+        "summary": "Post Settle",
+        "description": "打烊：立即返回 job_id，峰终结算 + 整理 + 做梦在后台跑（不阻塞调用方）。\n\n兼容三种传 session 的写法：body `{\"session_id\"}`、query `?session_id=`、缺省 default。",
+        "operationId": "post_settle_v1_settle_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "default",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SettleIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/jobs": {
+      "get": {
+        "tags": [
+          "运维"
+        ],
+        "summary": "Get Jobs",
+        "description": "任务积压：各状态计数 + 最近 job 列表（运维/守护进程观测用）。",
+        "operationId": "get_jobs_v1_jobs_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "default": 50,
+              "title": "Limit"
             }
           }
         ],
@@ -2228,6 +2456,18 @@
               }
             ],
             "title": "T Event"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key",
+            "description": "等价于 Idempotency-Key 头"
           }
         },
         "type": "object",
@@ -2286,6 +2526,42 @@
           "what"
         ],
         "title": "NoteIn"
+      },
+      "ObserveIn": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "user_text": {
+            "type": "string",
+            "title": "User Text",
+            "default": ""
+          },
+          "assistant_text": {
+            "type": "string",
+            "title": "Assistant Text",
+            "default": ""
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key",
+            "description": "等价于 Idempotency-Key 头"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id"
+        ],
+        "title": "ObserveIn",
+        "description": "POST /v1/observe：宿主自管循环时回写一来一回（异步落库，立即返回）。"
       },
       "OnboardIn": {
         "properties": {
@@ -2544,6 +2820,30 @@
         "type": "object",
         "title": "SettingsIn"
       },
+      "SettleIn": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "title": "Session Id",
+            "default": "default"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key",
+            "description": "等价于 Idempotency-Key 头"
+          }
+        },
+        "type": "object",
+        "title": "SettleIn",
+        "description": "POST /v1/settle：打烊（立即返回 job_id，后台执行）。"
+      },
       "StreamIn": {
         "properties": {
           "text": {
@@ -2602,6 +2902,18 @@
             "type": "string",
             "title": "Session Id",
             "default": "default"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key",
+            "description": "等价于 Idempotency-Key 头"
           }
         },
         "type": "object",

@@ -8,7 +8,7 @@ version = "1.0.0"
 description = "藏识 Alaya — 长期陪伴 AI 的记忆器官：五层记忆投影、预算约束检索、语义场、主被动一体记忆"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "TBD" }
+license = { text = "MIT" }
 authors = [{ name = "MyHub" }]
 keywords = ["memory", "llm", "agent", "long-term-memory", "sqlite"]
 classifiers = [
@@ -30,8 +30,8 @@ dev = ["numpy>=1.24", "fastapi>=0.110", "uvicorn>=0.27", "pydantic>=2", "jieba>=
 [project.scripts]
 alaya = "alaya.cli:main"
 
-[project.urls]
-Documentation = "https://example.invalid/alaya"
+[tool.setuptools]
+license-files = ["LICENSE"]
 
 [tool.setuptools.packages.find]
 include = ["alaya*"]

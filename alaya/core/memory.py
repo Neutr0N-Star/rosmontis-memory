@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 
 from ..config import Config
@@ -862,3 +863,52 @@ class Memory:
                    FROM session s ORDER BY s.last_active DESC LIMIT 50"""
             ).fetchall()
         return [dict(r) for r in rows]
+
+    # ── 守护进程辅助：空闲会话判定（C2）──────────────────
+    def idle_sessions(
+        self,
+        idle_timeout_s: float | None = None,
+        *,
+        now: float | None = None,
+        max_age_s: float | None = None,
+        limit: int = 200,
+    ) -> list[dict]:
+        """返回“空闲到该 settle、但还不算远古”的会话。
+
+        判定：`last_active <= now - idle_timeout`，且 `last_active >= now - max_age`
+        （后者避免把几个月前的历史会话全部翻出来重结算）。
+        `idle_timeout_s` 缺省读 `ALAYA_IDLE_TIMEOUT`（默认 1800 秒）；
+        `max_age_s` 缺省读 `ALAYA_SETTLE_MAX_AGE`（默认 86400 秒）。
+        """
+        now = time.time() if now is None else float(now)
+        timeout = _idle_env_float("ALAYA_IDLE_TIMEOUT", 1800.0) if idle_timeout_s is None else float(idle_timeout_s)
+        max_age = _idle_env_float("ALAYA_SETTLE_MAX_AGE", 86400.0) if max_age_s is None else float(max_age_s)
+        if timeout <= 0:
+            return []
+        params: list = [now - timeout]
+        sql = """SELECT id, last_active, created_at FROM session
+                 WHERE last_active IS NOT NULL AND last_active <= ?"""
+        if max_age and max_age > 0:
+            sql += " AND last_active >= ?"
+            params.append(now - max_age)
+        sql += " ORDER BY last_active ASC LIMIT ?"
+        params.append(max(1, int(limit)))
+        with DB.reader(self.cfg.db_path) as conn:
+            rows = conn.execute(sql, tuple(params)).fetchall()
+        return [
+            {
+                "session_id": r["id"],
+                "last_active": float(r["last_active"]),
+                "idle_s": round(now - float(r["last_active"]), 1),
+                "idle_timeout_s": timeout,
+            }
+            for r in rows
+        ]
+
+
+def _idle_env_float(key: str, default: float) -> float:
+    try:
+        raw = os.environ.get(key)
+        return float(raw) if raw not in (None, "") else float(default)
+    except (TypeError, ValueError):
+        return float(default)

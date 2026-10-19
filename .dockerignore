@@ -1,0 +1,22 @@
+# 构建上下文排除项：镜像里只需要代码 + 元数据
+.git
+.github
+.gitignore
+.venv
+venv
+__pycache__
+*.py[cod]
+*.egg-info
+build
+dist
+node_modules
+bench/_profile
+alaya.db
+alaya.db-*
+*.db
+*.db-wal
+*.db-shm
+docs/_wip
+tests
+web
+examples

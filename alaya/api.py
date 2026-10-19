@@ -353,6 +353,22 @@ class Handle:
         self._ensure_open()
         return transition_item(self._harness.mem, item_id, action, target=target, reason=reason, actor=actor)
 
+    def settle_now(self, space: str, conversation: str, *, timeout: float = 60.0) -> dict:
+        """同步做一次完整 settle（峰终结算 + 整理 + 做梦）。
+
+        `settle()` 是“立即返回 job_id”的异步形态；这个方法是守护/测试用的
+        同步变体：等它返回时结算已经完成。两步都保持“不阻塞接入方逻辑”的默认选择。
+        """
+        self._ensure_open()
+        sid = _session(space, conversation)
+        self._ensure_woken(sid)
+        try:
+            result = self._harness.sleep(sid)
+        except Exception as e:
+            raise AlayaError("settle_failed", f"{type(e).__name__}: {e}", retryable=True) from None
+        return {"ok": True, "space": space, "conversation": conversation,
+                "session_id": sid, "result": result}
+
     # ── 关闭 ──────────────────────────────────────────────
     def close(self) -> None:
         """关闭句柄：等后台任务收尾。可重复调用。"""

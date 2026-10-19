@@ -445,6 +445,154 @@ def transition(
     )
 
 
+# ── 批量状态转移（维护作业用：forget 成批归档）──────────────────
+_BATCH_ACTIONS = frozenset(
+    {"archive", "skip", "unmute", "unarchive", "review_note", "review_archive"}
+)
+_IN_CHUNK = 900          # SQLite 变量上限内足够安全
+_LOG_CHUNK = 500         # 多行 INSERT 一次 4500 个参数
+
+
+def _chunks(seq, size: int = _IN_CHUNK):
+    for i in range(0, len(seq), size):
+        yield seq[i : i + size]
+
+
+def _load_episode_rows(conn, ids: list[str]) -> dict[str, Any]:
+    """一次（分批）取回批量转移需要的 episode 列；不取 embedding BLOB。"""
+    rows: dict[str, Any] = {}
+    for chunk in _chunks(ids):
+        marks = ",".join("?" * len(chunk))
+        for r in conn.execute(
+            f"""SELECT id,session_id,role,text,t_event,t_ingest,source,tier,memory_type,author,
+                       confirmed,salience,emotion,archived,muted,meta_json,origin,state,state_at,gate_version
+                FROM episode WHERE id IN ({marks})""",
+            tuple(chunk),
+        ):
+            rows[r["id"]] = r
+    return rows
+
+
+def transition_many(
+    item_ids: list[str],
+    action: str,
+    *,
+    reason: str = "",
+    actor: str = "system",
+    cfg=None,
+) -> list[TransitionResult]:
+    """批量状态转移：**一次事务**批量 UPDATE episode + 批量写 `item_state_log`。
+
+    语义与逐条 `transition()` 对齐（同一 `gate.decide` 判定、每条成功转移一条日志、
+    缺失/被闸门拒绝的行返回 `ok=False`），但把 N 次「读 + BEGIN IMMEDIATE + 写」
+    压成 2 次批量语句，专供 forget 这类维护作业。非批量安全动作（升格/订正等）
+    自动退回逐条 `transition()`，保证语义不变。
+
+    返回 list[TransitionResult]，顺序同输入；重复 id 只处理第一次。
+    """
+    cfg, _, _ = _resolve(cfg)
+    act = gate.normalize_action(action)
+    ids = list(dict.fromkeys(str(i) for i in item_ids if i))
+    if not ids:
+        return []
+    if act not in _BATCH_ACTIONS:
+        return [transition(i, action, reason=reason, actor=actor, cfg=cfg) for i in ids]
+
+    now = time.time()
+    by_id: dict[str, TransitionResult] = {}
+    update_groups: dict[str, list[str]] = {}
+    log_rows: list[tuple] = []
+    missing: list[str] = []
+
+    with DB.reader(cfg.db_path) as conn:
+        rows = _load_episode_rows(conn, ids)
+
+    for item_id in ids:
+        row = rows.get(item_id)
+        if row is None:
+            missing.append(item_id)
+            continue
+        item = IT.MemoryItem.from_row(row)
+        dec = gate.decide(item, act, cfg=cfg, session_id=item.session_id)
+        from_state = dec.get("from", "") or item.state
+        if not dec.get("ok"):
+            by_id[item_id] = TransitionResult(
+                ok=False,
+                item_id=item_id,
+                action=act,
+                from_state=from_state,
+                to_state=from_state,
+                reason=dec.get("reason", "闸门拒绝"),
+                gate_version=dec.get("gate_version", gate.GATE_VERSION),
+                gates=dec.get("gate", {}),
+            )
+            continue
+        to_state = dec.get("to", "") or from_state
+        target_value = dec.get("target", "") or ""
+        by_id[item_id] = TransitionResult(
+            ok=True,
+            item_id=item_id,
+            action=act,
+            from_state=from_state,
+            to_state=to_state,
+            target=target_value,
+            reason=reason or dec.get("reason", ""),
+            gate_version=dec.get("gate_version", gate.GATE_VERSION),
+            gates=dec.get("gate", {}),
+        )
+        update_groups.setdefault(to_state, []).append(item_id)
+        log_rows.append(
+            (
+                item_id, from_state or None, to_state, act, target_value or None,
+                reason or dec.get("reason", ""), gate.gate_json(dec, reason=reason), now, actor,
+            )
+        )
+
+    if missing:
+        with DB.reader(cfg.db_path) as conn:
+            fact_ids = {
+                r["id"]
+                for chunk in _chunks(missing)
+                for r in conn.execute(
+                    f"SELECT id FROM fact WHERE id IN ({','.join('?' * len(chunk))})",
+                    tuple(chunk),
+                )
+            }
+        for item_id in missing:
+            fact_reason = "事实条目不走人格升格，请用状态槽"
+            by_id[item_id] = TransitionResult(
+                ok=False,
+                item_id=item_id,
+                action=act,
+                reason=fact_reason if item_id in fact_ids else "条目不存在",
+            )
+
+    if update_groups:
+        with DB.tx(cfg.db_path) as conn:
+            for to_state, group_ids in update_groups.items():
+                tier, archived, muted = IT.projection(to_state)
+                for chunk in _chunks(group_ids):
+                    marks = ",".join("?" * len(chunk))
+                    conn.execute(
+                        f"""UPDATE episode
+                            SET state=?, state_at=?, tier=?, archived=?, muted=?, gate_version=?
+                            WHERE id IN ({marks})""",
+                        (to_state, now, tier, archived, muted, gate.GATE_VERSION, *chunk),
+                    )
+            if log_rows:
+                for chunk in _chunks(log_rows, _LOG_CHUNK):
+                    values = ",".join(["(?,?,?,?,?,?,?,?,?)"] * len(chunk))
+                    params = [v for row in chunk for v in row]
+                    conn.execute(
+                        f"""INSERT INTO item_state_log
+                            (item_id,from_state,to_state,action,target,reason,gate_json,at,actor)
+                            VALUES {values}""",
+                        params,
+                    )
+
+    return [by_id[i] for i in ids]
+
+
 def state_of(item_id: str, *, cfg=None) -> str:
     """读当前状态（含 v2 兼容投影回退）。供 API/测试使用。"""
     cfg, _, _ = _resolve(cfg)
@@ -483,6 +631,7 @@ __all__ = [
     "submit",
     "enrich",
     "transition",
+    "transition_many",
     "enqueue_enrich",
     "wait_enrich",
     "pending_enrich",

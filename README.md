@@ -43,7 +43,8 @@ h = alaya.open("alaya.db")          # 打开/新建记忆库（首次会建表�
 h.wake("u1", "chat")                # 会话开始：载入人格与常驻块
 
 ctx = h.context("u1", "chat", "我最近搬到哪了？", budget=1200)   # 纯函数：不写库、不超预算
-print(ctx["prompt"])                # 直接拼进你模型的 system prompt
+system = ctx["system_prefix"] + "\n\n" + ctx["memory_text"]     # 直接拼进你模型的 system prompt（memory_text 可能为空）
+print(ctx["tokens"], ctx["abstained"])                          # 注入 token / 是否拒答
 
 r = h.turn("u1", "chat", "我搬到上海了。", history=[])           # 一轮：记录 → 注入 → 生成 → 回写
 print(r["reply"])
@@ -116,15 +117,19 @@ docker compose up --build      # 只绑 127.0.0.1:8770，数据在 ./data
 
 ```bash
 alaya serve --port 8770      # 本地服务（默认只绑 127.0.0.1）
+alaya daemon                 # 后台守护：自动整理/做梦/结算/遗忘（--once 只跑一拍）
+alaya backup                 # 备份（先 WAL checkpoint 再拷，运行中也安全）
 python run.py demo --reset   # 三个月对话演示（不需要模型）
-python -m unittest discover -s tests -p "test_*.py"   # 全部测试（98 项）
+python -m unittest discover -s tests -p "test_*.py"   # 全部测试（124 项）
 python bench/run_eval.py     # 质量基准（200 段合成对话 / 135 题）
 python bench/pareto.py       # 配置网格 → 帕累托前沿 → bench/report.md
 ```
 
 - 健康检查：`/healthz`（存活）、`/readyz`（库可读、schema 版本、降级状态）。
-- 备份：库里是 WAL 模式，**不要直接复制文件**；用 `PRAGMA wal_checkpoint(TRUNCATE)` 后再复制，或用 `alaya backup`（见 [docs/guides/operations.md](docs/guides/operations.md)）。
-- 升级旧库：首次打开会自动迁移格式，迁移前自动备份；数据可弃时直接换个新库文件即可。
+- 任务与节拍：`GET /v1/jobs` 看积压；`POST /v1/settle` 立即返回 job_id；空闲超过 `ALAYA_IDLE_TIMEOUT`（默认 1800 秒）时 daemon 自动结算。
+- 幂等：写接口（`/v1/episodes`、`/v1/turn`、`/v1/observe`、`/v1/settle`）支持 `Idempotency-Key`，24h 内同键回放且只写一条。
+- 备份：库里是 WAL 模式，**不要直接复制文件**；用 `alaya backup`（先 checkpoint 再复制并输出 sha256），恢复见 [docs/guides/operations.md](docs/guides/operations.md)。
+- 升级旧库：首次打开会自动迁移格式；数据可弃时直接换个新库文件即可。
 
 ---
 

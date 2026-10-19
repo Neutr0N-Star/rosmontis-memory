@@ -1,0 +1,18 @@
+services:
+  alaya:
+    build: .
+    # 只绑本机：默认不把记忆服务暴露到局域网/公网
+    ports:
+      - "127.0.0.1:8770:8770"
+    volumes:
+      - ./data:/data
+    environment:
+      ALAYA_DB: /data/alaya.db
+      # 离线降级示例；接自己的模型时改成：
+      # ALAYA_EMBED: ollama
+      # ALAYA_LLM_HOT: openai
+      # ALAYA_OPENAI_BASE: https://api.deepseek.com/v1
+      # ALAYA_OPENAI_KEY: ${ALAYA_OPENAI_KEY}
+      ALAYA_EMBED: hash
+      ALAYA_LLM_HOT: rule
+    restart: unless-stopped

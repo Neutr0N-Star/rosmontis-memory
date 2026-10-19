@@ -111,6 +111,20 @@ docker compose up --build      # 只绑 127.0.0.1:8770，数据在 ./data
 
 离线可跑：`ALAYA_EMBED=hash ALAYA_LLM_HOT=rule`（质量降级，仅演示）。
 
+### 语义向量（模型作为可下载资产）
+
+模型**不打包进 wheel**，按需下载到本地（默认 `~/.alaya/models/`，可用 `ALAYA_MODEL_DIR` 指到已有目录）：
+
+```bash
+alaya models list                          # 可用模型与安装状态
+alaya models install bge-small-zh-v1.5     # 断点续传 + 重试 + SHA-256 校验；--mirror 可换镜像
+alaya models where bge-small-zh-v1.5       # 打印 onnx / tokenizer / 目录
+alaya models verify bge-small-zh-v1.5      # 校验文件完整性
+```
+
+> 本地 ONNX 推理通道（`ALAYA_EMBED=local`，需 `pip install -e ".[embed]"`）与 OpenAI 兼容 embedding 通道（`ALAYA_EMBED=openai`）随 v1.1 落地；当前 `ollama` 与 `hash` 两条通道可用。
+> `/readyz` 会报告 `vector_mode`（`semantic` / `degraded` / `none`）与待回算条目数。
+
 ---
 
 ## 运行与运维

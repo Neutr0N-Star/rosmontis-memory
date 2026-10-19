@@ -334,6 +334,72 @@ def cmd_stats(args) -> int:
     return 0
 
 
+def cmd_models(args) -> int:
+    """嵌入模型资产管理。模型是独立可下载资产，不进 wheel。"""
+    from . import models as M
+
+    cmd = getattr(args, "models_cmd", "list")
+    name = getattr(args, "name", M.DEFAULT_MODEL)
+    root = getattr(args, "dir", None)
+
+    if cmd == "list":
+        print(f"模型目录：{M.models_root(root)}")
+        for r in M.describe():
+            flag = "已安装" if r["installed"] else "未安装"
+            note = f"  {r['note']}" if r.get("note") else ""
+            print(f"  {r['name']:<22} {r['dim']:>4}d  ~{r['approx_mb']}MB  {flag}{note}")
+        print(f"默认：{M.DEFAULT_MODEL}    安装：alaya models install {M.DEFAULT_MODEL}")
+        return 0
+
+    if cmd == "install":
+        def _progress(got: int, total: int) -> None:
+            if total:
+                print(f"\r  下载中 {got / 1048576:.1f}/{total / 1048576:.1f} MB", end="")
+            else:
+                print(f"\r  下载中 {got / 1048576:.1f} MB", end="")
+
+        try:
+            M.install(
+                name,
+                root=root,
+                mirror=getattr(args, "mirror", None),
+                force=getattr(args, "force", False),
+                progress=_progress,
+            )
+        except M.ModelError as e:
+            print(f"\n安装失败：{e}")
+            return 1
+        print(f"\n已安装 {name} → {M.model_dir(name, root)}")
+        return 0
+
+    if cmd == "where":
+        try:
+            p = M.resolve(name, root)
+        except M.ModelError as e:
+            print(str(e))
+            return 1
+        print(f"模型：{p['name']}  维度：{p['dim']}")
+        print(f"目录：{p['dir']}")
+        print(f"onnx：{p['onnx']}")
+        print(f"tokenizer：{p['tokenizer']}")
+        return 0
+
+    if cmd == "verify":
+        ok, problems = M.verify(name, root)
+        if ok:
+            print(f"{name} 校验通过")
+            return 0
+        print(f"{name} 校验失败：" + "；".join(problems))
+        return 1
+
+    if cmd == "remove":
+        print(f"已删除 {name}" if M.remove(name, root) else f"{name} 未安装")
+        return 0
+
+    print(f"未知子命令：{cmd}")
+    return 2
+
+
 def cmd_backup(args) -> int:
     """备份记忆库：WAL 模式不能直接复制文件，先 checkpoint 再拷，并记录 sha256。
 
@@ -487,6 +553,35 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--db", default=None, help="库文件路径（默认 env ALAYA_DB 或 alaya.db）")
     s.add_argument("--out", default=None, help="输出文件（默认 <库文件名>.<时间戳>.bak）")
     s.set_defaults(func=cmd_backup)
+
+    s = sub.add_parser("models", help="嵌入模型资产：下载 / 校验 / 位置 / 删除")
+    ms = s.add_subparsers(dest="models_cmd", required=True)
+
+    m = ms.add_parser("list", help="列出可用模型与安装状态")
+    m.add_argument("--dir", default=None, help="模型目录（默认 ALAYA_MODEL_DIR 或 ~/.alaya/models）")
+    m.set_defaults(func=cmd_models)
+
+    m = ms.add_parser("install", help="下载并校验一个模型（支持断点续传与镜像）")
+    m.add_argument("name", nargs="?", default="bge-small-zh-v1.5")
+    m.add_argument("--dir", default=None)
+    m.add_argument("--mirror", default=None, help="镜像根地址（默认 ALAYA_MODEL_MIRROR 或 huggingface.co）")
+    m.add_argument("--force", action="store_true", help="强制重新下载")
+    m.set_defaults(func=cmd_models)
+
+    m = ms.add_parser("where", help="打印模型目录与文件路径")
+    m.add_argument("name", nargs="?", default="bge-small-zh-v1.5")
+    m.add_argument("--dir", default=None)
+    m.set_defaults(func=cmd_models)
+
+    m = ms.add_parser("verify", help="校验已安装模型（SHA-256）")
+    m.add_argument("name", nargs="?", default="bge-small-zh-v1.5")
+    m.add_argument("--dir", default=None)
+    m.set_defaults(func=cmd_models)
+
+    m = ms.add_parser("remove", help="删除一个已安装模型")
+    m.add_argument("name", nargs="?", default="bge-small-zh-v1.5")
+    m.add_argument("--dir", default=None)
+    m.set_defaults(func=cmd_models)
 
     s = sub.add_parser("audit", help="体检")
     s.add_argument("--session", default=None)

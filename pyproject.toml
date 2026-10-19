@@ -24,6 +24,8 @@ dependencies = []
 numpy = ["numpy>=1.24"]
 # HTTP 服务形态（alaya serve）
 serve = ["fastapi>=0.110", "uvicorn>=0.27", "pydantic>=2", "jieba>=0.42"]
+# 本地语义向量（模型本身不打包，用 `alaya models install` 下载）
+embed = ["onnxruntime>=1.18", "tokenizers>=0.15"]
 # 本地开发与评测
 dev = ["numpy>=1.24", "fastapi>=0.110", "uvicorn>=0.27", "pydantic>=2", "jieba>=0.42"]
 

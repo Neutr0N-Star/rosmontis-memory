@@ -242,7 +242,7 @@ except alaya.AlayaError as e:
 | POST | `/v1/turn` | body：`text,session_id` | 一轮对话（`app.py:456-472`） |
 | POST | `/v1/session/wake` | query：`session_id` | 开会话 |
 | POST | `/v1/session/sleep` | query：`session_id` | 关会话：峰终+整理+做梦 |
-| POST | `/v1/context` | body：`query,session_id,budget,as_of` | **会写 `retrieval_log`**；与库 `Handle.context` 纯函数不同（`app.py:588-591`） |
+| POST | `/v1/context` | body：`query,session_id,budget,as_of` | **纯函数**：不写 `retrieval_log`、不写 `episode`，`memory_tokens` 硬压到 `budget` 内（与库 `Handle.context` 同一实现，走 `build_context(..., pure=True)`） |
 | POST | `/v1/tick` | query：`session_id` | 维护节拍 |
 | POST | `/v1/dream` | query：`session_id, force` | 做一次梦 |
 | GET | `/v1/dreams` | `session_id, limit` | 梦记录 |

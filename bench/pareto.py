@@ -453,7 +453,7 @@ def _extraction_block(ctx: dict) -> str:
         + f"- **离线规则抽取 F1 只有 {_fmt(rule['fact']['f1'])}**：核心规则兜底只认「我叫 X / 我在 X 上班」"
         "三种高频句式，这是设计取舍（宁缺毋滥），不是评测 bug。要测真实抽取质量需接模型"
         "（`--backend llm`，有 Ollama 时）；本报告的检索类数字用脚本化金标隔离抽取误差，"
-        "写入保真 {:.3f} 说明结构投影链路本身没有丢金标。\n".format(_fmt(wf["fact"]["f1"]))
+        f"写入保真 {_fmt(wf['fact']['f1'])} 说明结构投影链路本身没有丢金标。\n"
     )
 
 
@@ -540,6 +540,7 @@ def build_report(ctx: dict) -> str:
     mbn = ctx["metrics_by_name"]
     rec = ctx["recommendation"]
     fc = ctx["field_comparison"]
+    base = mbn["baseline_uniform"]
     return f"""\
 # 藏识 Alaya · 质量基准与帕累托报告
 

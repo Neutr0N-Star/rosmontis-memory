@@ -176,6 +176,8 @@ class Config:
     budget_tokens: int = field(default_factory=lambda: _envi("ALAYA_BUDGET", 1400))
     mmr_lambda: float = field(default_factory=lambda: _envf("ALAYA_MMR", 0.72))
     graph_hops: int = field(default_factory=lambda: _envi("ALAYA_HOPS", 2))
+    # 可见性（C2=B）：inbox 速记默认不参与召回；打开后允许检索（调试/回滚用）
+    inbox_retrievable: bool = field(default_factory=lambda: _envb("ALAYA_INBOX_RETRIEVABLE", False))
 
     # 遗忘
     forget_archive_r: float = field(default_factory=lambda: _envf("ALAYA_ARCHIVE_R", 0.08))

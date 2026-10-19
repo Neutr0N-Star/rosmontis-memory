@@ -24,6 +24,8 @@ import time
 from ..config import Config
 from . import db as DB
 from . import ids as IDS
+from . import item as IT
+from . import pipeline as TR
 from . import score as SC
 from . import text as TX
 from .llm import LLM
@@ -125,30 +127,43 @@ def dream(cfg: Config, llm: LLM | None, embedder, session_id: str, now: float | 
                     conn.execute("UPDATE episode SET emotion=? WHERE id=?", (new, r["id"]))
                     out["decoupled"] += 1
 
-    # ── 5 成梦 ──
+    # ── 5 成梦：走统一管线（唯一写入点 + 状态机 + item_state_log）──
     body = _compose_dream(llm, rows, abstracts, themes)
     dream_id = "ep_dream_" + IDS._digest(session_id, int(now))  # noqa: SLF001
     evidence = [r["id"] for r in rows]
     embs = embedder.embed_blob(body) if embedder is not None else None
 
+    dream_item = IT.MemoryItem(
+        id=dream_id,
+        session_id=session_id,
+        text=body,
+        origin=IT.ORIGIN_DREAM,
+        actor=IT.ACTOR_MODEL,       # 她自己的加工；episode.author 兼容投影为 self
+        memory_type="fact",
+        salience=0.4,               # 旧口径保留：梦固定低显著度
+        emotion=0.0,
+        t_event=now,
+        t_ingest=now,
+        role="dream",
+        source="dream",
+        embedding=embs,
+        meta={
+            "evidence": evidence[:20],
+            "abstracts": [a["text"] for a in abstracts],
+            "themes": themes,
+        },
+    )
+    sub = TR.submit(dream_item, project=False, cfg=cfg, embedder=embedder, llm=llm)
+    if not sub.ok:
+        out["note"] = f"成梦写入失败：{sub.reason}"
+        return out
+    if sub.duplicate:
+        out["dream_id"] = sub.item_id
+        out["note"] = "这一秒的梦已存在，跳过重复落库"
+        return out
+    dream_id = sub.item_id
+
     with DB.tx(cfg.db_path) as conn:
-        conn.execute(
-            """INSERT OR IGNORE INTO episode
-               (id,session_id,seq,role,text,t_event,t_ingest,source,tier,memory_type,author,
-                salience,emotion,embedding,meta_json)
-               VALUES(?,?,0,'dream',?,?,?,'dream','dream','fact','self',0.4,0,?,?)""",
-            (
-                dream_id, session_id, body, now, now, embs,
-                json.dumps(
-                    {"evidence": evidence[:20], "abstracts": [a["text"] for a in abstracts], "themes": themes},
-                    ensure_ascii=False,
-                ),
-            ),
-        )
-        conn.execute(
-            "INSERT INTO episode_fts(episode_id,tokens) VALUES(?,?)",
-            (dream_id, " ".join(TX.tokenize(body))),
-        )
         conn.execute(
             """INSERT INTO dream_log(id,session_id,dreamed_at,replayed,bound,abstracts,decoupled,text,evidence)
                VALUES(?,?,?,?,?,?,?,?,?)""",

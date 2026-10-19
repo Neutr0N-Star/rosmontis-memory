@@ -621,24 +621,60 @@ def enrich(cfg: Config, llm: LLM | None, episode_id: str, now: float | None = No
 
     # 用抽取结果修正 episode 的类型（不改状态，状态只由 gate/pipeline 改）
     mtype = ext.facts[0].memory_type if ext.facts else PR.classify_type(r["text"], r["source"])
-    if mtype and mtype != r["memory_type"]:
-        with DB.tx(cfg.db_path) as conn:
-            conn.execute("UPDATE episode SET memory_type=? WHERE id=?", (mtype, episode_id))
 
     if ext.empty():
         with DB.tx(cfg.db_path) as conn:
+            if mtype and mtype != r["memory_type"]:
+                conn.execute("UPDATE episode SET memory_type=? WHERE id=?", (mtype, episode_id))
+            # 评审 B4：enrich 结束在同一事务重算 salience，保证两入口同输入同分
+            new_sal = _canonical_salience(r, ext, mtype)
+            conn.execute("UPDATE episode SET salience=? WHERE id=?", (new_sal, episode_id))
             _merge_meta(conn, episode_id, {"enriched": True, "empty": True})
+        res["salience"] = new_sal
         return res
 
     with DB.tx(cfg.db_path) as conn:
+        if mtype and mtype != r["memory_type"]:
+            conn.execute("UPDATE episode SET memory_type=? WHERE id=?", (mtype, episode_id))
+        # 注意：必须在 _project_extraction 之前算——它会把 predicate 归一化，
+        # 而同步入口的 salience 是按归一化前的原文谓词算的（顺序必须一致）。
+        new_sal = _canonical_salience(r, ext, mtype)
         counts = _project_extraction(
             cfg, conn, r["session_id"], ext, episode_id, r["t_event"], now, embedder
         )
+        conn.execute("UPDATE episode SET salience=? WHERE id=?", (new_sal, episode_id))
         res["added"] = counts["added"]
         res["updated"] = counts["updated"]
         res["invalidated"] = counts["invalidated"]
         res["noop"] = counts["noop"]
         res["states_changed"] = counts["states_changed"]
         res["edges_touched"] = counts["edges_touched"]
+        res["salience"] = new_sal
         _merge_meta(conn, episode_id, {"enriched": True})
     return res
+
+
+def _canonical_salience(row, ext: EX.Extraction, memory_type: str = "") -> float:
+    """enrich 后的 salience 重算（评审 B4 / M3）。
+
+    enrich 与同步 ingest 用同一份 `salience_of`，输入取库里的文本、情绪、
+    actor 与刚抽出的结构证据，因此同输入两入口差 = 0。
+    """
+    try:
+        item = IT.MemoryItem.from_row(row)
+    except Exception:  # 极端脏行：退回最小输入，绝不让 enrich 崩在打分上
+        item = IT.MemoryItem(
+            id=str(row["id"]), session_id=str(row["session_id"]), text=str(row["text"] or ""),
+            actor=IT.ACTOR_SYSTEM, memory_type=memory_type or "fact",
+        )
+    return salience_of(
+        row["text"] or "",
+        float(row["emotion"] or 0.0),
+        actor=item.actor,
+        memory_type=memory_type or item.memory_type,
+        has_state=bool(ext.state_changes),
+        has_facts=bool(ext.facts),
+        has_entities=bool(ext.entities),
+        fact_predicates=[f.predicate for f in ext.facts],
+        segments=item.segments,
+    )

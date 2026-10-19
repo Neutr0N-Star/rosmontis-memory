@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 
@@ -14,6 +15,7 @@ from ..config import Config
 from . import db as DB
 from . import field as FD
 from . import ids as IDS
+from . import item as IT
 from . import score as SC
 from . import text as TX
 from . import timeparse
@@ -40,6 +42,139 @@ _WANT_PAST = ("以前", "之前", "当时", "那时候", "去年", "曾经", "�
 _WANT_NOW = ("现在", "目前", "最近", "如今", "这阵子", "还在")
 _WANT_CHANGE = ("变了", "变化", "后来", "改成", "不再是", "还住", "还喜欢")
 _WANT_IDENTITY = ("我叫", "我是谁", "名字", "我的名字", "我是做什么", "我住哪", "我在哪")
+
+
+# ── 可见性（C2=B：inbox 默认不可检索；archived/muted 恒不可见）─────
+# 状态真值在 episode.state（schema v3）；v2 旧库没有该列，用 tier/archived/muted
+# 现有列做兼容投影。所有召回路（dense/sparse/graph/field/常驻层）共用这一套判据。
+_SCHEMA_CAPS: dict[tuple[str, str, str], bool] = {}
+
+
+def _has_column(cfg: Config, table: str, column: str) -> bool:
+    """表列是否存在（v2 旧库兼容）。结果按库路径缓存，避免每次召回都 PRAGMA。"""
+    path = os.path.abspath(str(cfg.db_path))
+    key = (path, table, column)
+    cached = _SCHEMA_CAPS.get(key)
+    if cached is not None:
+        return cached
+    val = False
+    try:
+        with DB.reader(cfg.db_path) as conn:
+            val = any(str(r[1]) == column for r in conn.execute(f"PRAGMA table_info({table})").fetchall())
+    except Exception as e:  # 探列失败按"没有"处理，走兼容投影
+        log.debug("schema probe %s.%s failed: %s", table, column, e)
+    _SCHEMA_CAPS[key] = val
+    return val
+
+
+def _row_get(row, key: str, default=None):
+    """sqlite3.Row / dict 的统一取列；缺列返回 default。"""
+    try:
+        if key in row.keys():
+            return row[key]
+    except Exception:
+        pass
+    return default
+
+
+def _episode_state(row) -> str:
+    """行 → 状态真值。v2 旧库或 state 未回填（NULL）时用 tier/archived/muted 兜底。"""
+    st = _row_get(row, "state", "")
+    if st:
+        return str(st)
+    return IT.compat_state(
+        str(_row_get(row, "tier", "") or ""),
+        _row_get(row, "archived", 0) or 0,
+        _row_get(row, "muted", 0) or 0,
+    )
+
+
+def _state_visible(cfg: Config, state: str) -> bool:
+    """C2：archived/muted 恒不可见；inbox 默认不可见，`cfg.inbox_retrievable` 打开后可见。"""
+    st = state or ""
+    if IT.recall_visible(st):
+        return True
+    if st == IT.STATE_INBOX and bool(getattr(cfg, "inbox_retrievable", False)):
+        return True
+    return False
+
+
+def _episode_visible(cfg: Config, row) -> bool:
+    return _state_visible(cfg, _episode_state(row))
+
+
+def _fact_visible(cfg: Config, row) -> bool:
+    """fact 没有 state；v3 的 archived 是它独立的生命周期位（C3），归档后不再参与召回。"""
+    if _has_column(cfg, "fact", "archived") and bool(_row_get(row, "archived", 0)):
+        return False
+    return True
+
+
+def _note_filtered(plan: dict | None, n: int = 1) -> None:
+    """累计被状态可见性挡掉的候选数，最终写进 plan_json.filtered_by_state。"""
+    if plan is not None and n > 0:
+        plan["_filtered_by_state"] = int(plan.get("_filtered_by_state") or 0) + int(n)
+
+
+def _marks(n: int) -> str:
+    return ",".join("?" * n)
+
+
+def _visible_keys(cfg: Config, keys: list[str], plan: dict | None = None) -> list[str]:
+    """批量按状态过滤 node key（"fact:fa_x" / "episode:ep_x"），保持原顺序。
+
+    场路和图路拿到的是 id 列表，没有现成状态列；这里按表批量查一次再过滤，
+    避免逐条回表。隐藏条目的数量记进 plan（审计）。
+    """
+    if not keys:
+        return []
+    ep_ids: list[str] = []
+    fa_ids: list[str] = []
+    for key in keys:
+        kind, _sep, real = key.partition(":")
+        if not real:
+            continue
+        if kind == "episode":
+            ep_ids.append(real)
+        elif kind == "fact":
+            fa_ids.append(real)
+    keep: set[str] = set()
+    hidden = 0
+    if ep_ids:
+        uniq = list(dict.fromkeys(ep_ids))
+        cols = "id, tier, archived, muted" + (", state" if _has_column(cfg, "episode", "state") else "")
+        try:
+            with DB.reader(cfg.db_path) as conn:
+                rows = conn.execute(f"SELECT {cols} FROM episode WHERE id IN ({_marks(len(uniq))})", tuple(uniq)).fetchall()
+        except Exception as e:
+            log.debug("visible episode batch failed: %s", e)
+            rows = []
+        visible_eps = {r["id"] for r in rows if _episode_visible(cfg, r)}
+        hidden += len(uniq) - len(visible_eps)
+        keep |= {f"episode:{i}" for i in visible_eps}
+    if fa_ids:
+        uniq = list(dict.fromkeys(fa_ids))
+        if _has_column(cfg, "fact", "archived"):
+            try:
+                with DB.reader(cfg.db_path) as conn:
+                    rows = conn.execute(
+                        f"SELECT id FROM fact WHERE id IN ({_marks(len(uniq))}) AND archived=0", tuple(uniq)
+                    ).fetchall()
+                keep |= {f"fact:{r['id']}" for r in rows}
+            except Exception as e:
+                log.debug("visible fact batch failed: %s", e)
+                keep |= {f"fact:{i}" for i in uniq}
+        else:
+            keep |= {f"fact:{i}" for i in uniq}
+    _note_filtered(plan, hidden)
+    # 非 fact/episode 的节点（entity 等）是扩散中间节点，原样放行
+    return [k for k in keys if k in keep or k.partition(":")[0] not in ("fact", "episode")]
+
+
+def _finalize_plan(plan: dict, cfg: Config) -> None:
+    """把内部计数转成契约字段；只保留可审计的最终值。"""
+    plan["filtered_by_state"] = int(plan.pop("_filtered_by_state", 0) or 0)
+    plan["inbox_retrievable"] = bool(getattr(cfg, "inbox_retrievable", False))
 
 
 @dataclass
@@ -240,6 +375,10 @@ def _field_route(
         log.debug("field ignition failed: %s", e)
         seeds = []
 
+    # 场路与三路召回同口径：点着的种子先过状态可见性，隐藏条目不再参与扩散
+    if seeds:
+        visible_seeds = set(_visible_keys(cfg, [s.key for s in seeds], plan))
+        seeds = [s for s in seeds if s.key in visible_seeds]
     plan["field_enabled"] = True
     plan["seeds"] = len(seeds)
     plan["seed_top"] = [s.key for s in seeds[:8]]
@@ -258,6 +397,11 @@ def _field_route(
     plan["iterations"] = phi.iterations
     plan["edge_types"] = list(phi.edge_types)
     order = sorted(phi.items(), key=lambda kv: (-kv[1], kv[0]))
+    # 扩散会把邻居也点亮；这些邻居同样要过可见性，隐藏条目既不进候选也不进 phi_top
+    raw_ids = [k for k, _v in order if k.split(":", 1)[0] in ("fact", "episode")]
+    if raw_ids:
+        visible_ids = set(_visible_keys(cfg, raw_ids, plan))
+        order = [(k, v) for k, v in order if k not in raw_ids or k in visible_ids]
     plan["phi_top"] = [[k, round(float(v), 4)] for k, v in order[:10]]
     # entity 只是扩散的中间节点，不直接成条；fact/episode 才交回候选生成。
     ids = [k for k, _v in order if k.split(":", 1)[0] in ("fact", "episode")]
@@ -335,15 +479,18 @@ def _gather(
     sid = session_id or "default"
     depth = REFLEX_DEPTH.get(str(plan.get("depth") or "context"), REFLEX_DEPTH["context"])
     seen: dict[str, SC.Candidate] = {}
+    plan["_filtered_by_state"] = 0
+    plan["inbox_retrievable"] = bool(getattr(cfg, "inbox_retrievable", False))
 
     _collect_states(cfg, sid, as_of, seen, plan)
 
     if state_only:
+        _finalize_plan(plan, cfg)
         return list(seen.values())
 
     plan["_k_dense"] = depth["dense"]
     dense_ids = _dense(cfg, embedder, query, sid, as_of, plan)
-    sparse_ids = _sparse(cfg, query, sid, as_of, depth["sparse"])
+    sparse_ids = _sparse(cfg, query, sid, as_of, depth["sparse"], plan)
     graph_ids = _graph(cfg, plan, sid, as_of, depth["graph"])
 
     # 第四路：语义场（点火 + 扩散）。dense/sparse 的结果直接复用为前两路种子，
@@ -373,6 +520,7 @@ def _gather(
 
     # 场扩散出来的邻居折算成 graph_prox（种子本身不重复抬分）
     _apply_field(seen, phi)
+    _finalize_plan(plan, cfg)
     return list(seen.values())
 
 
@@ -419,6 +567,9 @@ def _collect_states(cfg: Config, sid: str, as_of: float, seen: dict, plan: dict)
             (sid, sid, as_of),
         ).fetchall()
     for r in rows:
+        if not _episode_visible(cfg, r):
+            _note_filtered(plan)
+            continue
         c = SC.Candidate(
             kind="resident",
             ref_id=r["id"],
@@ -446,6 +597,8 @@ def _dense(cfg: Config, embedder: Embedder, query: str, sid: str, as_of: float, 
         return []
     k = int(plan.get("_k_dense") or cfg.recall_k_dense)
     out: list[tuple[float, str]] = []
+    hidden = 0
+    has_state = _has_column(cfg, "episode", "state")
     with DB.reader(cfg.db_path) as conn:
         for table, kind in (("fact", "fact"), ("episode", "episode")):
             if table == "fact":
@@ -457,63 +610,96 @@ def _dense(cfg: Config, embedder: Embedder, query: str, sid: str, as_of: float, 
                     (sid, sid, as_of),
                 ).fetchall()
             else:
+                # 状态过滤放在算完余弦之后用 Python 做，这样 filtered_by_state 能
+                # 统计"本来会被召回、但被可见性挡下"的条数；archived/muted 不再
+                # 在 SQL 里预过滤，口径与 sparse/graph/field 完全一致。
+                cols = "id, embedding, tier, archived, muted" + (", state" if has_state else "")
                 rows = conn.execute(
-                    """SELECT id, embedding FROM episode
-                       WHERE (?='*' OR session_id=?) AND embedding IS NOT NULL
-                         AND archived=0 AND t_ingest <= ? AND source!='dream'
-                       ORDER BY t_ingest DESC LIMIT 20000""",
+                    f"""SELECT {cols} FROM episode
+                        WHERE (?='*' OR session_id=?) AND embedding IS NOT NULL
+                          AND t_ingest <= ? AND source!='dream'
+                        ORDER BY t_ingest DESC LIMIT 20000""",
                     (sid, sid, as_of),
                 ).fetchall()
             if not rows:
                 continue
-            ids = [r["id"] for r in rows]
-            blobs = [r["embedding"] for r in rows]
             # 维度校验：一条旧模型的 512 维向量混进来会让整批 reshape 失败。
             # 坏行剔除并计数，不让全库检索废掉。
             need = cfg.embed_dim * 4
-            good_idx = [i for i, b in enumerate(blobs) if b and len(b) == need]
-            if len(good_idx) != len(blobs):
-                log.warning("dense: %d 条向量维度不符已跳过", len(blobs) - len(good_idx))
-            ids = [ids[i] for i in good_idx]
-            blobs = [blobs[i] for i in good_idx]
+            good_idx = [i for i, r in enumerate(rows) if r["embedding"] and len(r["embedding"]) == need]
+            if len(good_idx) != len(rows):
+                log.warning("dense: %d 条向量维度不符已跳过", len(rows) - len(good_idx))
+            ids = [rows[i]["id"] for i in good_idx]
+            blobs = [rows[i]["embedding"] for i in good_idx]
+            vis = [(_episode_visible(cfg, rows[i]) if kind == "episode" else True) for i in good_idx]
+            del rows
             if not ids:
                 continue
             sims = V.cosine_batch(qv, blobs, cfg.embed_dim)
-            for i, s in zip(ids, sims):
-                if s > 0.05:
-                    out.append((s, f"{kind}:{i}"))
+            for i, sim, ok_vis in zip(ids, sims, vis):
+                if sim <= 0.05:
+                    continue
+                if not ok_vis:
+                    hidden += 1
+                    continue
+                out.append((float(sim), f"{kind}:{i}"))
 
+    _note_filtered(plan, hidden)
     out.sort(key=lambda x: x[0], reverse=True)
     return [rid for _, rid in out[:k]]
 
 
-def _sparse(cfg: Config, query: str, sid: str, as_of: float, k: int | None = None) -> list[str]:
+def _sparse(
+    cfg: Config,
+    query: str,
+    sid: str,
+    as_of: float,
+    k: int | None = None,
+    plan: dict | None = None,
+) -> list[str]:
     k = k or cfg.recall_k_sparse
     toks = TX.tokenize(query)
     fq = TX.fts_query(toks)
     if not fq:
         return []
+    has_state = _has_column(cfg, "episode", "state")
     out: list[str] = []
+    hidden = 0
     with DB.reader(cfg.db_path) as conn:
         # 两张 FTS 的过滤条件不同：fact 没有 source 列，episode 才要排掉做梦稿。
-        # 之前两张表共用一句 `t.source!='dream'`，fact 路一直在静默报错，等于少一路。
+        # 状态可见性不在 SQL 预过滤（会丢 filtered_by_state 计数），统一在 Python 判。
         for fts, kind, table, idcol, extra in (
             ("fact_fts", "fact", "fact", "fact_id", "t.status!='invalidated'"),
-            ("episode_fts", "episode", "episode", "episode_id", "t.archived=0 AND t.source!='dream'"),
+            ("episode_fts", "episode", "episode", "episode_id", "t.source!='dream'"),
         ):
+            cols = "t.id AS rid"
+            limit = int(k)
+            if kind == "episode":
+                cols += ", t.tier, t.archived, t.muted" + (", t.state" if has_state else "")
+                # 隐藏条目也在 FTS 里占排名，放大取数窗口再过滤，避免"可见条目被挤空"
+                limit = max(int(k) * 2, int(k) + 5)
             try:
                 rows = conn.execute(
-                    f"""SELECT t.id AS rid FROM {fts} f
+                    f"""SELECT {cols} FROM {fts} f
                         JOIN {table} t ON t.id = f.{idcol}
                         WHERE {fts} MATCH ? AND (?='*' OR t.session_id=?) AND t.t_ingest <= ?
                           AND {extra}
                         ORDER BY rank LIMIT ?""",
-                    (fq, sid, sid, as_of, k),
+                    (fq, sid, sid, as_of, limit),
                 ).fetchall()
             except Exception as e:  # FTS 语法异常不该拖垮检索
                 log.debug("fts failed %s: %s", fts, e)
                 continue
-            out.extend(f"{kind}:{r['rid']}" for r in rows)
+            kept = 0
+            for r in rows:
+                if kind == "episode" and not _episode_visible(cfg, r):
+                    hidden += 1
+                    continue
+                if kept >= int(k):
+                    break
+                out.append(f"{kind}:{r['rid']}")
+                kept += 1
+    _note_filtered(plan, hidden)
     return list(dict.fromkeys(out))
 
 
@@ -569,7 +755,8 @@ def _graph(cfg: Config, plan: dict, sid: str, as_of: float, k: int | None = None
             ).fetchall()
             for m in mrows:
                 out.append(f"{m['member_type']}:{m['member_id']}")
-    return list(dict.fromkeys(out))
+    # 超边成员里可能挂着 inbox/archived/muted 的 episode，统一按状态真值过滤
+    return _visible_keys(cfg, list(dict.fromkeys(out)), plan)
 
 
 def _load_candidate(cfg: Config, kind: str, real_id: str, sid: str, as_of: float, plan: dict) -> SC.Candidate | None:
@@ -581,6 +768,8 @@ def _load_candidate(cfg: Config, kind: str, real_id: str, sid: str, as_of: float
                 (real_id,),
             ).fetchone()
             if r is None or r["status"] == "invalidated":
+                return None
+            if not _fact_visible(cfg, r):
                 return None
             if r["t_ingest"] > as_of:
                 return None
@@ -613,7 +802,13 @@ def _load_candidate(cfg: Config, kind: str, real_id: str, sid: str, as_of: float
             )
         if kind == "episode":
             r = conn.execute("SELECT * FROM episode WHERE id=?", (real_id,)).fetchone()
-            if r is None or r["archived"]:
+            if r is None:
+                return None
+            # C2：inbox 默认不可检索 / archived / muted 恒不可见（v2 走兼容投影）
+            if not _episode_visible(cfg, r):
+                _note_filtered(plan)
+                return None
+            if r["archived"]:
                 return None
             if r["t_ingest"] > as_of:
                 return None

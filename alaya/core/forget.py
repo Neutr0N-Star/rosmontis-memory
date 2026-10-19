@@ -14,7 +14,9 @@ from dataclasses import dataclass, field
 from ..config import Config
 from . import db as DB
 from . import ids as IDS
+from . import item as IT
 from . import memory_field as MF
+from . import pipeline as TR
 from .llm import LLM
 
 log = logging.getLogger("alaya.forget")
@@ -57,10 +59,13 @@ def retention(
 
 
 def run_decay_only(cfg: Config, session_id: str, now: float | None = None) -> int:
-    """轻量衰减：只归档已经彻底凉掉的条目。写入路径调用这个，开销小。"""
+    """轻量衰减：只归档已经彻底凉掉的条目。写入路径调用这个，开销小。
+
+    归档走 `pipeline.transition('archive')`：state 与 `item_state_log` 同事务同步，
+    不再直接 UPDATE archived=1（M1/M4 收口）。
+    """
     now = now or time.time()
-    n = 0
-    with DB.tx(cfg.db_path) as conn:
+    with DB.reader(cfg.db_path) as conn:
         rows = conn.execute(
             """SELECT id, t_event, access_count, salience, tier, source, memory_type FROM episode
                WHERE session_id=? AND archived=0 AND folded_into IS NULL
@@ -68,13 +73,26 @@ def run_decay_only(cfg: Config, session_id: str, now: float | None = None) -> in
                LIMIT 2000""",
             (session_id,),
         ).fetchall()
+        cold: list[str] = []
         for r in rows:
             if r["salience"] >= cfg.forget_protect_salience:
                 continue
             space = MF.classify_space("episode", r["tier"], r["source"], r["memory_type"])
             if retention(cfg, r["t_event"], r["access_count"], r["salience"], now, space=space) < cfg.forget_archive_r:
-                conn.execute("UPDATE episode SET archived=1 WHERE id=?", (r["id"],))
-                n += 1
+                cold.append(r["id"])
+
+    n = 0
+    for item_id in cold:
+        try:
+            tr = TR.transition(
+                item_id, "archive", reason="decay below archive threshold",
+                actor=IT.ACTOR_SYSTEM, cfg=cfg,
+            )
+        except Exception as e:  # 单条失败不影响整轮衰减
+            log.warning("decay archive failed for %s: %s", item_id, e)
+            continue
+        if tr.ok and tr.from_state != tr.to_state:
+            n += 1
     return n
 
 
@@ -106,7 +124,8 @@ def run(cfg: Config, llm: LLM | None, session_id: str | None = None, now: float 
             cold.append({"row": r, "r": rr})
 
     # ── 折叠：按超边分组，冷却条目够多就合成摘要 ──
-    with DB.tx(cfg.db_path) as conn:
+    # 摘要创建走 `pipeline.submit`（全仓唯一 episode 写入点），分组/关联读在事务外。
+    with DB.reader(cfg.db_path) as conn:
         edge_map: dict[str, list] = {}
         for item in cold:
             r = item["row"]
@@ -134,50 +153,70 @@ def run(cfg: Config, llm: LLM | None, session_id: str | None = None, now: float 
             )
         edge_map = deduped
 
-        for eid, members in edge_map.items():
-            if len(members) < cfg.fold_min_members:
-                continue
-            text = _summarize(llm, members)
-            summary_id = "ep_fold_" + IDS._digest(eid, int(now))  # noqa: SLF001
-            conn.execute(
-                """INSERT OR IGNORE INTO episode(id,session_id,seq,role,text,t_event,t_ingest,salience,meta_json)
-                   VALUES(?,?,0,'summary',?,?,?,0.55,?)""",
-                (
-                    summary_id,
-                    members[0]["session_id"],
-                    text,
-                    members[-1]["t_event"],
-                    now,
-                    '{"is_summary": true}',
-                ),
-            )
-            try:
-                from .text import tokenize
+    for eid, members in edge_map.items():
+        if len(members) < cfg.fold_min_members:
+            continue
+        text = _summarize(llm, members)
+        summary_id = "ep_fold_" + IDS._digest(eid, int(now))  # noqa: SLF001
+        summary_item = IT.MemoryItem(
+            id=summary_id,
+            session_id=members[0]["session_id"],
+            text=text,
+            origin=IT.ORIGIN_SUMMARY,
+            actor=IT.ACTOR_SYSTEM,
+            memory_type="fact",
+            salience=0.55,          # 旧口径保留
+            emotion=0.0,
+            t_event=members[-1]["t_event"],
+            t_ingest=now,
+            role="summary",         # role='summary' 语义保留
+            source="summary",
+            meta={"is_summary": True},
+        )
+        sub = TR.submit(summary_item, project=False, cfg=cfg, embedder=embedder, llm=llm)
+        if not sub.ok:
+            rep.errors.append(f"fold submit failed for {eid}: {sub.reason}")
+            continue
+        summary_id = sub.item_id
 
-                toks = " ".join(tokenize(text))
-            except Exception:
-                toks = text[:200]
-            conn.execute(
-                "INSERT INTO episode_fts(episode_id,tokens) VALUES(?,?)",
-                (summary_id, toks),
-            )
+        with DB.tx(cfg.db_path) as conn:
             for m in members:
                 conn.execute("UPDATE episode SET folded_into=? WHERE id=?", (summary_id, m["id"]))
             conn.execute(
                 "INSERT OR IGNORE INTO hyperedge_member(edge_id,member_type,member_id,weight,added_at) VALUES(?,?,?,1.2,?)",
                 (eid, "episode", summary_id, now),
             )
-            rep.folded += len(members)
-            rep.folded_into.append(summary_id)
+        rep.folded += len(members)
+        rep.folded_into.append(summary_id)
 
-        # ── 归档：折叠之后仍然极冷的条目 ──
+    # ── 归档：折叠之后仍然极冷的条目（走状态机，写 item_state_log）──
+    if cold:
+        cold_ids = [item["row"]["id"] for item in cold]
+        marks = ",".join("?" * len(cold_ids))
+        with DB.reader(cfg.db_path) as conn:
+            cur_rows = {
+                r["id"]: dict(r)
+                for r in conn.execute(
+                    f"SELECT id, folded_into, archived FROM episode WHERE id IN ({marks})",
+                    cold_ids,
+                )
+            }
         for item in cold:
             r = item["row"]
-            cur = conn.execute("SELECT folded_into, archived FROM episode WHERE id=?", (r["id"],)).fetchone()
+            cur = cur_rows.get(r["id"])
             if cur is None or cur["archived"]:
                 continue
-            conn.execute("UPDATE episode SET archived=1 WHERE id=?", (r["id"],))
-            rep.archived += 1
+            try:
+                tr = TR.transition(
+                    r["id"], "archive", reason="cold after fold",
+                    actor=IT.ACTOR_SYSTEM,
+                    cfg=cfg,
+                )
+            except Exception as e:
+                rep.errors.append(f"archive failed for {r['id']}: {e}")
+                continue
+            if tr.ok and tr.from_state != tr.to_state:
+                rep.archived += 1
 
     log.info("forget: scanned=%d folded=%d archived=%d", rep.scanned, rep.folded, rep.archived)
     return rep

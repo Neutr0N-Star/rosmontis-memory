@@ -3,7 +3,7 @@
   "info": {
     "title": "藏识 Alaya",
     "description": "长期陪伴 AI 的记忆器官：五层记忆 + 三轴 + 预算约束检索",
-    "version": "1.1.0"
+    "version": "1.1.1"
   },
   "paths": {
     "/v1/episodes": {

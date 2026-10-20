@@ -332,8 +332,9 @@ class Memory:
             )
         return out
 
+    # hyperedge_member 不在这里：它没有 session_id，删法见 wipe() 里的专门一段
     _WIPE_TABLES = (
-        "retrieval_log", "hyperedge_member", "hyperedge", "state_slot",
+        "retrieval_log", "hyperedge", "state_slot",
         "tombstone", "fact", "entity", "persona",
         "episode_fts", "episode", "observation", "page",
     )
@@ -342,8 +343,11 @@ class Memory:
         """删掉一个角色的全部数据。
 
         只动带 session_id 的表。这个操作不可逆，调用方必须先确认。
+        任何一张表删失败都会在返回值里点名（`ok=False` + `failed_tables`）——
+        以前异常被 except 吞掉，调用方看到的是"擦干净了"，实际留了残片。
         """
         counts = {}
+        failed: list[str] = []
         with DB.tx(self.cfg.db_path) as conn:
             # 审计表没有 session_id，先按 episode 归属清掉，避免删库后留孤儿日志
             try:
@@ -353,15 +357,33 @@ class Memory:
                 )
                 counts["item_state_log"] = cur.rowcount
             except Exception:
-                pass
+                failed.append("item_state_log")
+            # 超边成员表没有 session_id，按"边属于本会话 / 成员归属本会话"清，
+            # 且必须在 episode、fact、hyperedge 被删之前做——以前它混在通用循环里
+            # 按 session_id 删，一直报 no such column 却被吞掉，wipe 完留一堆孤儿成员。
+            try:
+                cur = conn.execute(
+                    """DELETE FROM hyperedge_member
+                       WHERE edge_id IN (SELECT id FROM hyperedge WHERE session_id=?)
+                          OR member_id IN (SELECT id FROM episode WHERE session_id=?)
+                          OR member_id IN (SELECT id FROM fact WHERE session_id=?)""",
+                    (session_id, session_id, session_id),
+                )
+                counts["hyperedge_member"] = cur.rowcount
+            except Exception:
+                failed.append("hyperedge_member")
             for t in self._WIPE_TABLES:
                 try:
                     col = "episode_id" if t == "episode_fts" else "session_id"
                     cur = conn.execute(f"DELETE FROM {t} WHERE {col}=?", (session_id,))
                     counts[t] = cur.rowcount
                 except Exception:
-                    pass
-        return {"session_id": session_id, "wiped": counts}
+                    failed.append(t)
+        out = {"session_id": session_id, "wiped": counts}
+        if failed:
+            log.warning("wipe 有表未删成功：%s", failed)
+            out = {"ok": False, "failed_tables": failed, **out}
+        return out
 
     def state_snapshot(
         self, scope: str, as_of: float | None = None, session_id: str | None = None
@@ -835,6 +857,9 @@ class Memory:
         return AUD.audit(self.cfg, session_id)
 
     def stats(self) -> dict:
+        # 明细要在进 reader 之前取：pending_backfill_detail 自己开一次只读连接，
+        # 嵌套 reader 会共用线程本地连接，口径容易串。
+        pending = self.pending_backfill_detail()
         with DB.reader(self.cfg.db_path) as conn:
             def c(t: str, where: str = "") -> int:
                 sql = f"SELECT COUNT(*) c FROM {t}"
@@ -855,7 +880,10 @@ class Memory:
                 "embed_model": getattr(self.embedder, "model_id", "") or self.cfg.embed_model_id,
                 "embed_dim": int(getattr(self.embedder, "dim", self.cfg.embed_dim) or 0),
                 "vector_mode": self.embedder.vector_mode(),
-                "pending_backfill": self.pending_backfill(),
+                "pending_backfill": pending["pending_backfill"],
+                "null_vectors": pending["null_vectors"],
+                "stale_identity": pending["stale_identity"],
+                "identity_known": pending["identity_known"],
                 "llm_hot": {"provider": self.llm_hot.provider, "model": self.llm_hot.model, "calls": self.llm_hot.calls, "failures": self.llm_hot.failures},
                 "llm_deep": {"provider": self.llm_deep.provider, "model": self.llm_deep.model, "calls": self.llm_deep.calls, "failures": self.llm_deep.failures},
                 "degraded": self.embedder.degraded,
@@ -863,30 +891,65 @@ class Memory:
 
     # ── 向量身份与 NULL 回算（C4）────────────────────────
     def vector_mode(self) -> str:
-        """semantic / degraded / none（/readyz 与 stats 共用）。"""
+        """semantic / degraded / none / misconfigured（/readyz 与 stats 共用）。"""
         return self.embedder.vector_mode() if self.embedder is not None else "none"
 
     def pending_backfill(self, session_id: str | None = None) -> int:
-        """还差多少条 NULL 向量（episode + fact）。"""
+        """还差多少条要算向量（从未算过 + 身份不符），整型总量。
+
+        保留 int 返回：`jobs` 与既有调用方都按数字判断"要不要投递回算 job"。
+        要区分两类，用 `pending_backfill_detail()`。
+        """
+        d = self.pending_backfill_detail(session_id)
+        return int(d["null_vectors"]) + int(d["stale_identity"])
+
+    def pending_backfill_detail(self, session_id: str | None = None) -> dict:
+        """待回算明细：`null_vectors`（从未算过）+ `stale_identity`（身份不符）。
+
+        只认 `embedding IS NULL` 的话，换模型后旧身份向量非 NULL → 不重算也不
+        计数 → `/readyz` 全绿而库半失明。两个数拆开报，运维才知道该重算多少。
+
+        拿不到当前身份（embedder 不可用 / model 名为空）时只数 NULL：
+        没有基准就不该断言"谁的向量不对"——塞一个 `!= ''` 的 SQL 条件会把
+        所有写过身份的行都算成 stale，把排查方向引到"向量坏了"这种错结论上。
+        `identity_known` 让调用方一眼看出这个数是"真的 0"还是"数不出来"。
+        """
+        model_id, _dim = WR.embedding_identity(self.embedder)
+        out = {
+            "null_vectors": 0,
+            "stale_identity": 0,
+            "total": 0,
+            "pending_backfill": 0,
+            "identity_known": bool(model_id),
+        }
         with DB.reader(self.cfg.db_path) as conn:
-            n = 0
-            if session_id:
-                n += int(
-                    conn.execute(
-                        "SELECT COUNT(*) c FROM episode WHERE embedding IS NULL AND session_id=?",
-                        (session_id,),
-                    ).fetchone()["c"]
-                )
-                n += int(
-                    conn.execute(
-                        "SELECT COUNT(*) c FROM fact WHERE embedding IS NULL AND session_id=?",
-                        (session_id,),
-                    ).fetchone()["c"]
-                )
-            else:
-                n += int(conn.execute("SELECT COUNT(*) c FROM episode WHERE embedding IS NULL").fetchone()["c"])
-                n += int(conn.execute("SELECT COUNT(*) c FROM fact WHERE embedding IS NULL").fetchone()["c"])
-        return n
+            for table in ("episode", "fact"):
+                if model_id:
+                    sql = f"""SELECT
+                                SUM(CASE WHEN embedding IS NULL THEN 1 ELSE 0 END) AS n_null,
+                                SUM(CASE WHEN embedding IS NOT NULL
+                                          AND (embed_model IS NULL OR embed_model != ?)
+                                         THEN 1 ELSE 0 END) AS n_stale
+                              FROM {table}"""
+                    args: list = [model_id]
+                else:
+                    # 身份未知：只数"从未算过"，不对任何已有向量下结论
+                    sql = f"""SELECT
+                                SUM(CASE WHEN embedding IS NULL THEN 1 ELSE 0 END) AS n_null,
+                                0 AS n_stale
+                              FROM {table}"""
+                    args = []
+                if session_id:
+                    sql += " WHERE session_id=?"
+                    args.append(session_id)
+                r = conn.execute(sql, tuple(args)).fetchone()
+                out["null_vectors"] += int(r["n_null"] or 0)
+                out["stale_identity"] += int(r["n_stale"] or 0)
+        out["pending_backfill"] = out["null_vectors"] + out["stale_identity"]
+        # 队长口径：明细里的总量叫 total；pending_backfill 这个键留着，
+        # 让只认旧名字的消费方（含 Tess 的探测助手）不至于读空。
+        out["total"] = out["pending_backfill"]
+        return out
 
     def backfill_embeddings(
         self,
@@ -895,9 +958,10 @@ class Memory:
         session_id: str | None = None,
         now: float | None = None,
     ) -> dict:
-        """把降级期写下的 NULL 向量补齐（job kind=embed_backfill 的执行体）。
+        """把待回算的向量补齐（job kind=embed_backfill 的执行体）。
 
-        - 只读一批 NULL 行 → 批量算向量 → **一个事务** executemany 回写；
+        - 判据：没算过（NULL）**或身份不是当前 embedder 的**，一起重算；
+        - 只读一批待办行 → 批量算向量 → **一个事务** executemany 回写；
         - 回写同时记录向量身份（embed_model/embed_dim）；
         - 语义模式不可用（hash/none/断路）时直接跳过，不写伪向量。
         """
@@ -922,35 +986,44 @@ class Memory:
             return base
 
         limit = max(1, min(int(limit), 5000))
+        model_id, dim = WR.embedding_identity(emb)
+        if not model_id:
+            # 没有身份基准时重算没有意义：写完仍然没有可信的 embed_model，
+            # 下一轮还会被算成待办——只会把同一批行反复重算。
+            base["skipped"] = True
+            base["reason"] = "拿不到当前向量身份（model_id 为空），无法判断该回算哪些行"
+            base["remaining"] = self.pending_backfill(session_id)
+            return base
+        # 待回算的判据与 pending_backfill_detail 同口径：没算过，或者身份不是当前的。
+        # 只在 embedding IS NULL 上打转的话，换模型后旧向量永远留着旧身份。
+        need = "(embedding IS NULL OR embed_model IS NULL OR embed_model != ?)"
         with DB.reader(self.cfg.db_path) as conn:
             if session_id:
                 episodes = conn.execute(
-                    """SELECT id, text FROM episode
-                       WHERE embedding IS NULL AND session_id=? AND text IS NOT NULL AND text!=''
-                       ORDER BY t_ingest DESC LIMIT ?""",
-                    (session_id, limit),
+                    f"""SELECT id, text FROM episode
+                        WHERE {need} AND session_id=? AND text IS NOT NULL AND text!=''
+                        ORDER BY t_ingest DESC LIMIT ?""",
+                    (model_id or "", session_id, limit),
                 ).fetchall()
                 facts = conn.execute(
-                    """SELECT id, predicate, object_text FROM fact
-                       WHERE embedding IS NULL AND session_id=?
-                       ORDER BY t_ingest DESC LIMIT ?""",
-                    (session_id, limit),
+                    f"""SELECT id, predicate, object_text FROM fact
+                        WHERE {need} AND session_id=?
+                        ORDER BY t_ingest DESC LIMIT ?""",
+                    (model_id or "", session_id, limit),
                 ).fetchall()
             else:
                 episodes = conn.execute(
-                    """SELECT id, text FROM episode
-                       WHERE embedding IS NULL AND text IS NOT NULL AND text!=''
-                       ORDER BY t_ingest DESC LIMIT ?""",
-                    (limit,),
+                    f"""SELECT id, text FROM episode
+                        WHERE {need} AND text IS NOT NULL AND text!=''
+                        ORDER BY t_ingest DESC LIMIT ?""",
+                    (model_id or "", limit),
                 ).fetchall()
                 facts = conn.execute(
-                    """SELECT id, predicate, object_text FROM fact
-                       WHERE embedding IS NULL ORDER BY t_ingest DESC LIMIT ?""",
-                    (limit,),
+                    f"""SELECT id, predicate, object_text FROM fact
+                        WHERE {need} ORDER BY t_ingest DESC LIMIT ?""",
+                    (model_id or "", limit),
                 ).fetchall()
 
-        model_id = str(getattr(emb, "model_id", "") or "").strip() or None
-        dim = int(getattr(emb, "dim", 0) or 0) or None
         ep_updates: list[tuple] = []
         fact_updates: list[tuple] = []
         for r in episodes:

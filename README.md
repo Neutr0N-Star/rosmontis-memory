@@ -135,8 +135,10 @@ alaya models where bge-small-zh-v1.5       # 打印 onnx / tokenizer / 目录
 alaya models verify bge-small-zh-v1.5      # 校验文件完整性
 ```
 
-> 本地 ONNX 推理通道（`ALAYA_EMBED=local`，需 `pip install -e ".[embed]"`）与 OpenAI 兼容 embedding 通道（`ALAYA_EMBED=openai`）随 v1.1 落地；当前 `ollama` 与 `hash` 两条通道可用。
-> `/readyz` 会报告 `vector_mode`（`semantic` / `degraded` / `none`）与待回算条目数。
+> **通道现状（v1.1.1）**：`ollama` 与 `hash` 可用。
+> `local`（本地 ONNX 进程内推理）与 `openai`（兼容 `/v1/embeddings`）**尚未实现**——配置这两个值会在启动时直接抛 `embed_provider_unavailable`，不会静默降级。
+> `alaya models install` 下载的模型目前**没有推理侧消费者**，请勿仅凭它判断本地语义检索可用。
+> `/readyz` 与 `context()` 都会报告 `vector_mode`（`semantic` / `degraded` / `misconfigured` / `none`）与待回算条目数。`misconfigured` 表示「配置的维度与模型实际输出不一致」——此时写入不落向量、回算会被跳过，请核对 `ALAYA_EMBED_DIM`，不要当成普通降级。
 
 ---
 

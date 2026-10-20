@@ -23,6 +23,7 @@ import urllib.error
 import urllib.request
 from collections import OrderedDict
 
+from ..errors import AlayaError
 from . import vec as V
 
 log = logging.getLogger("alaya.embed")
@@ -34,6 +35,25 @@ provider_registry: dict[str, str] = {
     "hash": "builtin-test-fallback",
     "none": "builtin-disabled",
 }
+
+
+class EmbedProviderError(AlayaError):
+    """配置了未注册的 provider：启动即失败，不静默降级成 hash。
+
+    静默换 hash 的代价是"以为在跑语义检索、实际全库不落向量"，运维在
+    `/readyz` 上也看不出来。hash / none 是真实模式，但必须**显式**写才生效。
+    """
+
+    def __init__(self, provider: str):
+        self.provider = provider
+        self.available = sorted(provider_registry)
+        super().__init__(
+            "embed_provider_unavailable",
+            f"embedding provider 不可用：{provider!r}；"
+            f"可用：{'、'.join(self.available)}（hash / none 需显式配置才生效）",
+            retryable=False,
+        )
+
 
 # 断路器参数
 BACKOFF_BASE = 30.0        # 首次失败后 30s 重探
@@ -80,7 +100,12 @@ class Embedder:
         clock=None,
         probe_timeout: float = PROBE_TIMEOUT,
     ):
-        self.provider = provider if provider in provider_registry else "hash"
+        prov = str(provider or "").strip().lower()
+        if prov not in provider_registry:
+            # 拼错的 provider 静默变 hash，是最难查的一类"库半失明"：写入端
+            # 以为在算语义向量，实际上一个字都没算出来。启动就炸比静默好。
+            raise EmbedProviderError(prov or provider)
+        self.provider = prov
         self.model = model
         # 向量身份：写入 episode.embed_model / fact.embed_model 的稳定标识。
         # 默认取模型名；换模型/换档时由 config.embed_model_id 显式区分。
@@ -92,6 +117,9 @@ class Embedder:
         self.cache = _LRU()
         self.degraded = False
         self.degraded_reason: str | None = None
+        # 配置维度与实际模型输出不一致（首次拿到远程向量时才能发现）。
+        # 这类错误最容易被吞成"静默跳过所有向量"，所以要单独外露成 misconfigured。
+        self.dim_mismatch: str | None = None
 
         # ── 断路器状态 ──────────────────────────────────────
         self._clock = clock or time.monotonic
@@ -120,9 +148,13 @@ class Embedder:
         return {"model": self.model_id, "model_name": self.model, "dim": self.dim}
 
     def vector_mode(self) -> str:
-        """semantic / degraded / none：给 /readyz 与 stats 的一眼判据。"""
+        """semantic / degraded / none / misconfigured：给 /readyz 与 stats 的一眼判据。"""
         if self.provider == "none":
             return "none"
+        if self.dim_mismatch:
+            # 维度对不上的向量永远进不了余弦，等同于没有向量——但它不是
+            # "服务挂了"，而是"配置写错了"，必须让运维看到区别。
+            return "misconfigured"
         if self.provider != "ollama":
             return "degraded"       # hash：有向量但不是语义向量，仅供测试/兜底
         return "degraded" if self.degraded else "semantic"
@@ -157,6 +189,16 @@ class Embedder:
             return hit
         if self.provider == "ollama":
             v = self._try_remote(t)
+            if v is not None and len(v) != self.dim and not self.dim_mismatch:
+                # 真实模型的输出维度与配置不一致：不静默按配置截断/补零（那会
+                # 造出一堆无意义向量），而是标记出来让 /readyz 与 context() 说话。
+                self.dim_mismatch = (
+                    f"embed_dim 配置为 {self.dim}，但模型返回 {len(v)} 维；"
+                    f"请核对 ALAYA_EMBED_DIM 与 {self.model_id or self.model} 的实际维度"
+                )
+                self.degraded = True
+                self.degraded_reason = self.dim_mismatch
+                log.warning("embedding 维度不一致：%s", self.dim_mismatch)
         elif self.provider == "hash":
             v = None
         else:  # none

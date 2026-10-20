@@ -121,7 +121,13 @@ def _query_identity(cfg: Config, embedder: Embedder) -> tuple[str | None, int]:
     model = str(
         getattr(embedder, "model_id", "") or getattr(embedder, "model", "") or ""
     ).strip()
-    return (model or None), int(getattr(cfg, "embed_dim", 0) or 0)
+    # 维度取 embedder 自己的：写入侧记的是 embedder.dim，若按 cfg.embed_dim 比，
+    # 一旦配置与实际模型不一致，整库都会被判成"身份不符"而全数跳过。
+    try:
+        dim = int(getattr(embedder, "dim", 0) or 0) or int(getattr(cfg, "embed_dim", 0) or 0)
+    except (TypeError, ValueError):
+        dim = int(getattr(cfg, "embed_dim", 0) or 0)
+    return (model or None), dim
 
 
 def _identity_ok(row, model_id: str | None, dim: int, *, has_model: bool, has_dim: bool) -> bool:
@@ -334,7 +340,7 @@ def recall(
             if blk["text"]:
                 res.items = [RecallItem("page", "resident_pages", 3, blk["text"], 1.0, blk["tokens"], {"pages": blk["pages"]})]
                 res.tokens_used = blk["tokens"]
-                res.prompt = _render(res.items)
+                res.prompt = _render(res.items, as_of, now)
         except Exception:
             pass
         res.latency_ms = (time.perf_counter() - t0) * 1000
@@ -361,7 +367,7 @@ def recall(
     res.items = items
     res.tokens_used = used
     res.excluded = excluded
-    res.prompt = _render(items)
+    res.prompt = _render(items, as_of, now)
     res.latency_ms = (time.perf_counter() - t0) * 1000
     _log(cfg, session_id, res)
     return res
@@ -655,12 +661,15 @@ def _dense(cfg: Config, embedder: Embedder, query: str, sid: str, as_of: float, 
             has_ed = _has_column(cfg, table, "embed_dim")
             id_cols = (", embed_model" if has_em else "") + (", embed_dim" if has_ed else "")
             if table == "fact":
+                # 事实的生效范围是区间：as_of 落在 [t_valid_from, t_valid_to) 内
+                # 就算「当时为真」。只按 status 预筛会把整段历史筛没，as_of 形同虚设。
                 rows = conn.execute(
                     f"""SELECT id, embedding{id_cols} FROM fact
                         WHERE embedding IS NOT NULL
-                          AND status!='invalidated' AND t_ingest <= ?{sid_sql}
+                          AND t_valid_from <= ? AND (t_valid_to IS NULL OR t_valid_to > ?)
+                          AND t_ingest <= ?{sid_sql}
                         ORDER BY t_ingest DESC LIMIT ?""",
-                    (as_of, *sid_args, window),
+                    (as_of, as_of, as_of, *sid_args, window),
                 ).fetchall()
             else:
                 # 状态过滤放在算完余弦之后用 Python 做，这样 filtered_by_state 能
@@ -678,10 +687,15 @@ def _dense(cfg: Config, embedder: Embedder, query: str, sid: str, as_of: float, 
                 continue
             # 维度 + 身份校验：不同模型/维度的向量不参与余弦（NULL=未知身份仍可用）。
             # 坏行剔除并计数，不让全库检索废掉。
-            need = cfg.embed_dim * 4
+            # 长度判据用**查询向量自己的长度**：cfg.embed_dim 是配置猜测，换模型
+            # 后它可能与实际模型维度不一致，按它判会把整库判成坏向量。
+            need = len(qv)
             good_idx = []
             for i, r in enumerate(rows):
                 if not r["embedding"] or len(r["embedding"]) != need:
+                    # 维度不符也是"这条向量不能用"，必须进审计计数：
+                    # 提前 continue 掉它，`identity_skipped` 就永远看不出该回算多少条。
+                    identity_skipped += 1
                     continue
                 if not _identity_ok(r, model_id, query_dim, has_model=has_em, has_dim=has_ed):
                     identity_skipped += 1
@@ -727,11 +741,16 @@ def _sparse(
     out: list[str] = []
     hidden = 0
     with DB.reader(cfg.db_path) as conn:
-        # 两张 FTS 的过滤条件不同：fact 没有 source 列，episode 才要排掉做梦稿。
+        # 两张 FTS 的过滤条件不同：fact 的"有效性"是区间（as_of 落在区间内即为当时为真，
+        # 后来被订正不影响历史检索），episode 才要排掉做梦稿。
         # 状态可见性不在 SQL 预过滤（会丢 filtered_by_state 计数），统一在 Python 判。
-        for fts, kind, table, idcol, extra in (
-            ("fact_fts", "fact", "fact", "fact_id", "t.status!='invalidated'"),
-            ("episode_fts", "episode", "episode", "episode_id", "t.source!='dream'"),
+        for fts, kind, table, idcol, extra, extra_args in (
+            (
+                "fact_fts", "fact", "fact", "fact_id",
+                "t.t_valid_from <= ? AND (t.t_valid_to IS NULL OR t.t_valid_to > ?)",
+                (as_of, as_of),
+            ),
+            ("episode_fts", "episode", "episode", "episode_id", "t.source!='dream'", ()),
         ):
             cols = "t.id AS rid"
             limit = int(k)
@@ -747,7 +766,7 @@ def _sparse(
                         WHERE {fts} MATCH ? AND t.t_ingest <= ?{sid_sql}
                           AND {extra}
                         ORDER BY rank LIMIT ?""",
-                    (fq, as_of, *sid_args, limit),
+                    (fq, as_of, *sid_args, *extra_args, limit),
                 ).fetchall()
             except Exception as e:  # FTS 语法异常不该拖垮检索
                 log.debug("fts failed %s: %s", fts, e)
@@ -789,17 +808,21 @@ def _graph(cfg: Config, plan: dict, sid: str, as_of: float, k: int | None = None
         marks_e = ",".join("?" * len(ent_ids))
         frows = conn.execute(
             f"""SELECT id FROM fact
-                WHERE subject_id IN ({marks_e}) AND status!='invalidated' AND t_ingest <= ?
+                WHERE subject_id IN ({marks_e})
+                  AND t_valid_from <= ? AND (t_valid_to IS NULL OR t_valid_to > ?)
+                  AND t_ingest <= ?
                 ORDER BY salience DESC LIMIT ?""",
-            (*ent_ids, as_of, k),
+            (*ent_ids, as_of, as_of, as_of, k),
         ).fetchall()
         out.extend(f"fact:{r['id']}" for r in frows)
 
         orows = conn.execute(
             f"""SELECT id FROM fact
-                WHERE object_entity_id IN ({marks_e}) AND status!='invalidated' AND t_ingest <= ?
+                WHERE object_entity_id IN ({marks_e})
+                  AND t_valid_from <= ? AND (t_valid_to IS NULL OR t_valid_to > ?)
+                  AND t_ingest <= ?
                 ORDER BY salience DESC LIMIT ?""",
-            (*ent_ids, as_of, max(2, k // 2)),
+            (*ent_ids, as_of, as_of, as_of, max(2, k // 2)),
         ).fetchall()
         out.extend(f"fact:{r['id']}" for r in orows)
 
@@ -830,16 +853,24 @@ def _load_candidate(cfg: Config, kind: str, real_id: str, sid: str, as_of: float
                    LEFT JOIN entity e ON e.id=f.subject_id WHERE f.id=?""",
                 (real_id,),
             ).fetchone()
-            if r is None or r["status"] == "invalidated":
+            if r is None:
                 return None
             if not _fact_visible(cfg, r):
                 return None
             if r["t_ingest"] > as_of:
                 return None
+            # 世界时间有效性按区间判：[t_valid_from, t_valid_to) 覆盖 as_of 就是
+            # 「那个时候为真」。它后来被订正（status=invalidated）只说明"现在不真"，
+            # 不能反向删掉历史——按 status 硬过滤会让 as_of 查不到任何旧说法。
             if r["t_valid_from"] > as_of:
                 return None
-            # 世界时间有效性
-            if r["t_valid_to"] is not None and r["t_valid_to"] < as_of and r["t_invalid"] is not None:
+            t_valid_to = r["t_valid_to"]
+            if t_valid_to is not None:
+                if t_valid_to <= as_of:
+                    return None
+            elif r["status"] == "invalidated":
+                # 区间没有终点却已被判废（mute / forget 直接改 status）：无法证明
+                # 它"当时真到什么时候"，只能不进候选，免得死事实复活成当前真理。
                 return None
             neg = r["polarity"] < 0
             conflict = bool(plan.get("wants_negative")) != neg and plan.get("intent") == "polarity"
@@ -875,10 +906,12 @@ def _load_candidate(cfg: Config, kind: str, real_id: str, sid: str, as_of: float
                 return None
             if r["t_ingest"] > as_of:
                 return None
-            # 冷却：刚被想起过的不再重复浮现，否则会反复说同一句话
             if r["muted"]:
                 return None
-            if r["cooldown_until"] and r["cooldown_until"] > as_of:
+            # 冷却：刚被想起过的不再重复浮现，否则会反复说同一句话。
+            # 时钟必须是真实时间——冷却记的也是真实时间，拿 as_of 比等于
+            # 「回到过去时所有处于冷却的条目永不可见」。
+            if r["cooldown_until"] and r["cooldown_until"] > time.time():
                 return None
             # 已被订正的旧说法：默认不再浮现，但保留可查（时间旅行能看到）
             if r["superseded_by"]:
@@ -897,8 +930,8 @@ def _load_candidate(cfg: Config, kind: str, real_id: str, sid: str, as_of: float
                 memory_type=r["memory_type"],
                 cooldown_until=r["cooldown_until"] or 0.0,
                 correction_of=r["correction_of"],
-                base_text=(r["text"] or "")[:60],
-                summary=(r["text"] or "")[:90],
+                base_text=_clip_text(r["text"] or "", 60),
+                summary=_clip_text(r["text"] or "", 90),
                 raw_text=r["text"] or "",
                 meta={
                     "role": r["role"],
@@ -943,7 +976,8 @@ def _refine_cosine(cfg: Config, embedder: Embedder, query: str, seen: dict, dens
         rows += conn.execute(
             f"SELECT id, embedding{id_cols} FROM episode WHERE id IN ({placeholders})", ids
         ).fetchall()
-    need = cfg.embed_dim * 4
+    # 与 _dense 同口径：能不能比，看查询向量自己的长度
+    need = len(qv)
     for r in rows:
         if not r["embedding"] or len(r["embedding"]) != need or r["id"] not in seen:
             continue
@@ -1068,8 +1102,12 @@ def _pack(
     return items, total, excluded
 
 
-def _render(items: list[RecallItem]) -> str:
-    """把选中的记忆渲染成可注入的上下文块。"""
+def _render(items: list[RecallItem], as_of: float | None = None, now: float | None = None) -> str:
+    """把选中的记忆渲染成可注入的上下文块。
+
+    `as_of`/`now` 只影响状态块的标题：回到过去检索时把历史值标成「当前状态」
+    等于告诉模型假真理。时态显式从参数进来，不落地成全局状态（单例串味过）。
+    """
     if not items:
         return ""
     groups = {"page": [], "resident": [], "state": [], "fact": [], "episode": [], "theme": []}
@@ -1080,7 +1118,7 @@ def _render(items: list[RecallItem]) -> str:
     if groups["page"]:
         lines.append(groups["page"][0].text)
     if groups["state"]:
-        lines.append("【当前状态】")
+        lines.append(_state_title(as_of, now))
         lines.extend(f"- {i.text}" for i in groups["state"])
     if groups["resident"]:
         lines.append("【一直知道的】")
@@ -1096,6 +1134,31 @@ def _render(items: list[RecallItem]) -> str:
         lines.extend(f"- {i.text}" for i in groups["episode"])
     lines.append("</memory>")
     return "\n".join(lines)
+
+
+def _clip_text(text: str, limit: int) -> str:
+    """按句子/子句边界截断，绝不硬切半个分句。
+
+    硬切出来的半句会被模型当成完整断言读（"我其实不想" vs "我其实不想去"）。
+    找不到边界时返回整条：多花几个 token 也比给一句读不通的话安全。
+    """
+    t = (text or "").strip()
+    if len(t) <= limit:
+        return t
+    head = t[:limit]
+    cut = max(head.rfind(ch) for ch in "。！？；!?;\n，,")
+    return head[: cut + 1].strip() if cut > 0 else t
+
+
+def _state_title(as_of: float | None, now: float | None) -> str:
+    """状态块的标题要说出时态。
+
+    `as_of` 落在过去时，「当前状态」是谎话——模型会把历史值当真理用。
+    1 秒容差是给"as_of=now 但两个时钟差几毫秒"的正常调用留的。
+    """
+    if as_of is not None and now is not None and as_of < now - 1.0:
+        return "【当时的·可能已变化】"
+    return "【当前状态】"
 
 
 def _log(cfg: Config, sid: str | None, res: RecallResult) -> None:

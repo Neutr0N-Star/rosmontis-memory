@@ -2,6 +2,58 @@
 
 本项目遵循语义化版本；`api_version`（对外接口版本）与包版本分开管理，破坏性接口改动才升。
 
+## [未发布]
+
+### Changed
+
+- **性能默认值变化**：`numpy` 提为默认依赖（`dependencies = ["numpy>=1.24"]`），向量余弦与批量运算默认走 numpy；`numpy` extra 保留为兼容壳，`pip install -e ".[numpy]"` 继续可用。纯 Python 兜底仍在，未装 numpy 也能运行。
+- **备份改为在线备份 + 自检**：`alaya backup` 与迁移前备份改用 SQLite 在线备份 API，并核对核心表行数；并发读者在场时不再产出缺数据的 `.bak`，自检不过就报错退出（不再是 `rc=0` 假成功）。
+- **未实现的 embedding 通道启动即失败**：`ALAYA_EMBED=local` / `openai` 或拼错的值不再静默降级为 `hash`，而是抛 `embed_provider_unavailable`；`context()` 新增 `vector_mode` / `degraded` / `degraded_reason` 三个字段。
+
+## [1.1.1] - 2026-10-20
+
+修一批「声明了不变量、实现没接上、指标还全绿」的问题。这类问题不崩不报错，但数据是错的，所以单独发一个补丁版本。
+
+### Fixed · 数据正确性
+
+- **订正不再失效**：`state_slot.source_fact` 此前从未被写入，导致 `correct()` 里"关掉旧状态槽"的 UPDATE 恒命中空集，`audit` 的 `stale_state` 也因此永久报 0（安全网结构性失明）。现在写入时会记下槽由哪条事实推出，两条链路都接上了。
+- **补录历史不再作废"当前真理"**：此前乱序写入会把当前槽的 `until` 设成一个更早的时刻（负区间），并把历史状态顶成当前状态。现在 `t_event` 早于当前槽起点时只插入一段已闭合的历史区间 `[t_event, cur.since)`，当前槽原样保留；`_insert_slot` 另有一道负区间兜底。
+- **`as_of` 时态成立**：此前回到过去检索时，状态块照样标「当前状态」，事实也按"现在是否有效"硬过滤。现在状态块标题随时态切换（「当时的·可能已变化」），事实有效性改为区间判定 `t_valid_from <= as_of < t_valid_to`，冷却判定改用真实时钟，同一 `as_of` 的检索结果可复现。
+- **换模型后可恢复**：`embed_backfill` 与 `pending_backfill` 此前只认 `embedding IS NULL`，换模型后旧身份向量既不重算也不计数，`/readyz` 全绿而库里一半数据在语义检索中失明。现在判据包含"身份不符"，并拆分上报 `null_vectors` / `stale_identity`；维度不符的条目也计入 `identity_skipped`，不再提前 `continue` 掉计数。
+
+### Fixed · 信任与可观测
+
+- **备份不再静默产出空文件**：此前 `wal_checkpoint(TRUNCATE)` 返回 `busy` 时只 `except` 不看返回值，并发读时复制出的 `.bak` 可能是坏库，而命令 `rc=0` 还打印 sha256。现在改用 SQLite 在线 backup API，备份后自检三张核心表的行数，失败即抛 `BackupError` / 非零退出。迁移前备份走同一实现——**没备份成功就不许迁移**。
+- **未知 embedding provider 启动即失败**：此前 `ALAYA_EMBED=local` / `openai` / 拼写错误都会静默变成 `hash`（无语义），且降级时写路径不落向量，用户只会觉得"她记不住事"。现在抛 `embed_provider_unavailable`（`retryable=False`），错误消息带原值与可用清单。
+- **降级不再只有 `/readyz` 一个出口**：`Handle.context()` 新增 `vector_mode` / `degraded` / `degraded_reason` 三个字段（只增不改），库形态使用者也能察觉。
+- **`wipe()` 失败点名**：此前逐表 `except Exception: pass`，某表删失败仍返回成功。现在返回 `failed_tables`。**顺带修掉一个真 bug：`hyperedge_member` 从来没被 wipe 过。**
+- **锁冲突不再是裸异常**：`tx()` 重试耗尽后抛 `AlayaError("db_locked", retryable=True)`，宿主可按 `retryable` 处理。
+
+### Fixed · 其他
+
+- `INSERT OR IGNORE` 命中时不再假报 `added`：返回 `{"action": "EXISTS"}`，且不再重复插 `fact_fts`。
+- 文本截断按子句边界切，不再硬切字符（`text[:60]` 会切出"…却"这种半句）。
+- 做梦不再把源 episode 的 `emotion` 打 0.6 折写回（此前可高频触发、不可恢复，且会污染情绪加权的 A/B 结论）。
+- `_entity_seeds` 去掉 `instr` 子串扫，改 `norm_name IN` + 前缀匹配。20k 实体实测 2.06ms → 0.01ms，结果集逐条一致。
+
+### Changed
+
+- **numpy 提为默认依赖**：此前 `dependencies = []`，默认安装走纯 Python 余弦，2000 episode 的 `context()` P50 约 1.4s（`cosine_batch` 占 95%）。`[embed]` extra 保留但**当前无推理侧消费者**。
+- `AlayaError` 移到 `alaya/errors.py`（`core` 不能 import `api`，且 `db.tx` 也要抛同一类型）。`alaya.api.AlayaError` 等既有导入路径保持不变。
+- `alaya/__init__.py` 导出面不变。
+
+### Known limitations（本版未修，已知且记录在案）
+
+- **状态槽**已修负区间与"补录顶替当前真理"，但**事实层（`fact.t_valid_to`）尚未同步**：补录历史事件时仍可能写出 `t_valid_to < t_valid_from`。状态层已安全，事实层的时间轴仍是下一轮的事。
+- **`field.py` 的历史事实仍按 `status` 硬过滤**：`dense` / `sparse` 两路已改区间判定，语义场这一路还是"现在无效就看不见"，查历史可能少一路候选。
+- **注入预算三套口径打架**：`max(80, budget×depth)` 会放大、常驻块额外累加、硬闸从尾部整行丢弃。后果是小预算时注入为空、大预算时先放大再硬砍。README 的"绝不超预算"在公共 API 层成立，"小预算也能注点东西"不成立。
+- **工具层可绕过闸门**：`_skip` 在闸门拒绝后仍强制写库，已归档条目可被"静音复活"、事实被静音即不可逆作废。
+- **`settle` 不幂等**：重复调用每次叠加 salience，反复调用可把条目推到近 1.0。
+- **遗忘/做梦以 `t_event` 而非 `t_ingest` 为时间基准**：带真实历史时间戳导入的会话可能首次写入即被判冷归档。
+- **异步 enrich 只有内存队列**：进程重启后未抽取的 episode 永久停在"只有原文"态，无补偿任务。
+- **语义场点火强度两套量纲**：`routes` 分支给排名分、`_vec_seeds` 给校准余弦，按绝对量设的阈值在默认路径下失效。
+- **`local` / `openai` 向量通道未实现**：原计划随 v1.1 交付，延至 v1.2。模型下载器已可用，但下载的模型暂无推理侧消费者。
+
 ## [1.1.0] - 2026-10-20
 
 首个面向公开分发的版本：加了默认安全、模型资产与向量可靠性。

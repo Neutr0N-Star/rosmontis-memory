@@ -13,15 +13,17 @@ schema 版本：v4（v3=A2 §3.3 状态机；v4=向量身份）。迁移纪律�
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
-import shutil
 import sqlite3
 import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
+
+from ..errors import AlayaError
 
 log = logging.getLogger("alaya.db")
 
@@ -162,7 +164,7 @@ def init_db(db_path: str, *, migrate: str = "auto") -> dict:
         elif version < SCHEMA_VERSION:
             if mode == "never":
                 raise MigrationRequiredError(db_path, version)
-            backup_path = _backup_before_migration(conn, db_path)
+            backup_path = _backup_before_migration(db_path)
             _migrate(conn, version)
             migrated = True
 
@@ -231,25 +233,124 @@ def _backup_name(db_path: str, now: float | None = None) -> Path:
     return candidate
 
 
-def _backup_before_migration(conn: sqlite3.Connection, db_path: str, now: float | None = None) -> str | None:
-    """迁移前备份：先 WAL checkpoint（TRUNCATE），再复制主库文件。
+# 备份自检的核心表：缺表或行数不一致都算备份失败（A-1）
+_BACKUP_CORE_TABLES = ("episode", "fact", "state_slot")
 
-    复制失败时抛 `BackupError`——**没有备份就不许迁移**（P1-3）。
+
+def _count_tables(conn: sqlite3.Connection, tables: tuple[str, ...]) -> dict[str, int]:
+    """按表名数行数；表不存在就记为缺失（不出现在返回值里）。"""
+    have = {
+        str(r[0])
+        for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+    }
+    return {
+        t: int(conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0])
+        for t in tables
+        if t in have
+    }
+
+
+def _quiet_close(conn: sqlite3.Connection | None) -> None:
+    if conn is None:
+        return
+    try:
+        conn.close()
+    except sqlite3.Error:  # 收尾失败不该盖住真正的错误
+        pass
+
+
+def _sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def backup_db(db_path: str, dest: str | Path | None = None, *, now: float | None = None) -> dict:
+    """在线备份记忆库并自检，返回 `{"path", "tables", "sha256"}`。
+
+    为什么不用「WAL checkpoint + shutil.copy2」：并发读者在场时 checkpoint 返回
+    busy，WAL 里未合并的帧不会进主库文件——复制出的 .bak 缺表缺数据，而调用方
+    仍以为成功。`Connection.backup()` 是 SQLite 的在线备份，读一致快照，读者在场
+    也能拿到完整库。备份后按核心表行数自检，不一致就当失败（不留半成品文件）。
+    """
+    src_path = os.path.abspath(str(db_path))
+    if not os.path.exists(src_path):
+        raise BackupError(f"库不存在，无法备份：{src_path}")
+    target = Path(dest) if dest is not None else _backup_name(src_path, now)
+
+    src: sqlite3.Connection | None = None
+    dst: sqlite3.Connection | None = None
+    try:
+        src = sqlite3.connect(src_path, timeout=30.0, isolation_level=None)
+        # 先开读事务：让「主库行数」与随后复制的快照取自同一时刻，自检才有意义
+        src.execute("BEGIN")
+        src_counts = _count_tables(src, _BACKUP_CORE_TABLES)
+        dst = sqlite3.connect(str(target), isolation_level=None)
+        src.backup(dst)
+        dst.close()
+        dst = None
+        src.execute("ROLLBACK")
+        src.close()
+        src = None
+    except (sqlite3.Error, OSError) as e:
+        _quiet_close(dst)
+        _quiet_close(src)
+        _remove_quietly(target)
+        raise BackupError(f"备份失败（{src_path} -> {target}）：{type(e).__name__}: {e}") from e
+
+    try:
+        check = sqlite3.connect(str(target), timeout=10.0)
+        try:
+            bak_counts = _count_tables(check, _BACKUP_CORE_TABLES)
+        finally:
+            check.close()
+    except sqlite3.Error as e:
+        _remove_quietly(target)
+        raise BackupError(f"备份自检失败（打不开 {target}）：{type(e).__name__}: {e}") from e
+
+    # 自检口径：以**主库现有的核心表**为准。迁移前备份的库可能还没建
+    # state_slot（v2 → v3 才有），那是合法状态；只有"主库有、备份没有"才算失败。
+    missing = [t for t in src_counts if t not in bak_counts]
+    mismatched = {
+        t: (src_counts[t], bak_counts[t])
+        for t in src_counts
+        if t in bak_counts and src_counts[t] != bak_counts[t]
+    }
+    if missing or mismatched:
+        _remove_quietly(target)
+        raise BackupError(
+            f"备份自检不通过（{target}）：缺表={missing or '无'}，行数不一致={mismatched or '无'}；"
+            f"已删除该文件，请检查是否还有进程独占数据库"
+        )
+    return {"path": str(target), "tables": bak_counts, "sha256": _sha256(target)}
+
+
+def _remove_quietly(path: Path) -> None:
+    """删半成品备份；删不掉也不能盖住原始错误。"""
+    try:
+        path.unlink(missing_ok=True)
+    except OSError as e:
+        log.warning("清理失败备份 %s 失败：%s", path, e)
+
+
+def _backup_before_migration(db_path: str, now: float | None = None) -> str | None:
+    """迁移前备份：走与 `alaya backup` 同一条在线备份实现。
+
+    没有备份就不许迁移（P1-3）：备份失败会抛 `BackupError` 中断迁移。
     """
     path = os.path.abspath(str(db_path))
     if not os.path.exists(path):
         return None
     try:
-        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-    except sqlite3.Error as e:  # 被其它连接占着也能继续（退化为非 TRUNCATE 检查点）
-        log.warning("checkpoint before backup failed: %s", e)
-    dest = _backup_name(path, now)
-    try:
-        shutil.copy2(path, dest)
-        log.warning("schema migration backup: %s", dest)
-        return str(dest)
-    except OSError as e:
-        raise BackupError(f"迁移前备份失败（{path} -> {dest}）：{type(e).__name__}: {e}") from e
+        info = backup_db(path, _backup_name(path, now), now=now)
+    except BackupError as e:
+        raise BackupError(f"迁移前备份失败（{path}）：{e}") from e
+    log.warning("schema migration backup: %s", info["path"])
+    return info["path"]
 
 
 def current_version(db_path: str) -> int:
@@ -510,7 +611,12 @@ def _backfill_state_log(conn: sqlite3.Connection, now: float) -> None:
 
 @contextmanager
 def tx(db_path: str):
-    """写事务。遇到临时锁冲突自动退避重试（并发写入实测有 3.75% 失败率）。"""
+    """写事务。遇到临时锁冲突自动退避重试（并发写入实测有 3.75% 失败率）。
+
+    重试耗尽的锁冲突包成 `AlayaError("db_locked", retryable=True)`：裸
+    `sqlite3.OperationalError` 会漏到 HTTP/CLI 层变成 500 加一段 SQLite 内部
+    文案，调用方既判不出"能不能重试"，也拿不到稳定的错误码。
+    """
     conn = connect(db_path)
     acquired = False
     last_err: Exception | None = None
@@ -527,7 +633,11 @@ def tx(db_path: str):
                 continue
             raise
     if not acquired:
-        raise last_err or sqlite3.OperationalError("cannot begin transaction")
+        raise AlayaError(
+            "db_locked",
+            f"数据库被其它进程占用，重试后仍无法开启写事务：{last_err}",
+            retryable=True,
+        ) from last_err
 
     try:
         yield conn

@@ -26,7 +26,6 @@ from . import db as DB
 from . import ids as IDS
 from . import item as IT
 from . import pipeline as TR
-from . import score as SC
 from . import text as TX
 from .llm import LLM
 
@@ -35,8 +34,6 @@ log = logging.getLogger("alaya.dream")
 MIN_INTERVAL_HOURS = 6      # 距上次做梦至少 6 小时
 MIN_NEW_ITEMS = 5           # 当天至少 5 条新记忆才值得做
 MAX_REPLAY = 30             # 一次最多重放 30 条
-DECOUPLE_FACTOR = 0.6       # 情绪衰减系数
-DECOUPLE_FLOOR = 0.15       # 情绪下限
 
 
 def ensure_tables(cfg: Config) -> None:
@@ -115,17 +112,11 @@ def dream(cfg: Config, llm: LLM | None, embedder, session_id: str, now: float | 
     abstracts = _abstract(llm, rows, themes)
     out["abstracts"] = len(abstracts)
 
-    # ── 4 脱敏：情绪衰减，语义不动 ──
-    if rows:
-        with DB.tx(cfg.db_path) as conn:
-            for r in rows:
-                old = r["emotion"] or 0.0
-                if old <= 0:
-                    continue
-                new = SC.decouple(old, DECOUPLE_FACTOR, DECOUPLE_FLOOR)
-                if abs(new - old) > 1e-6:
-                    conn.execute("UPDATE episode SET emotion=? WHERE id=?", (new, r["id"]))
-                    out["decoupled"] += 1
+    # ── 4 脱敏：不再回写源 episode 的 emotion ──
+    # 原实现每做一次梦就把 emotion 乘一次衰减系数，结果是同一段记忆被反复
+    # "消化"，情绪单调递减到地板值——做梦次数成了记忆强度的隐形调节器。
+    # 情绪是当时的事实，不该被后台任务改写；脱敏只体现在梦的叙述里。
+    # （`dream_log.decoupled` 列保留，恒 0，避免动 schema。）
 
     # ── 5 成梦：走统一管线（唯一写入点 + 状态机 + item_state_log）──
     body = _compose_dream(llm, rows, abstracts, themes)

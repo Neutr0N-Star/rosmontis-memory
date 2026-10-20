@@ -57,24 +57,9 @@ __version__ = "1"
 __all__ = ["open", "Handle", "AlayaError", "ApiError", "__version__"]
 
 
-class AlayaError(Exception):
-    """公共 API 的统一异常：带 code / message / retryable。"""
-
-    def __init__(self, code: str, message: str, retryable: bool = False):
-        super().__init__(message)
-        self.code = code
-        self.message = message
-        self.retryable = retryable
-
-    def as_dict(self) -> dict:
-        return {
-            "ok": False,
-            "data": None,
-            "error": {"code": self.code, "message": self.message, "retryable": self.retryable},
-        }
-
-
-ApiError = AlayaError
+# 错误类型定义挪到 alaya/errors.py（core 也要能在故障现场抛它，反向 import 会成环），
+# 这里原样再导出，`alaya.api.AlayaError` / `alaya.AlayaError` 的身份不变。
+from .errors import AlayaError, ApiError  # noqa: E402
 
 _CONFIG_FIELDS = {f.name for f in dataclasses.fields(Config)}
 _HANDLE_OPTIONS = (
@@ -183,6 +168,11 @@ class Handle:
             "latency_ms": ctx["latency_ms"],
             "as_of": ctx["as_of"],
             "pure": True,
+            # 降级信号外露（A-7）：接入方不必去猜"现在到底是不是真在跑向量检索"。
+            # 取值在 build_context 之后读——那次检索本身就可能触发断路器。
+            "vector_mode": self._harness.mem.vector_mode(),
+            "degraded": bool(getattr(self._harness.mem.embedder, "degraded", False)),
+            "degraded_reason": getattr(self._harness.mem.embedder, "degraded_reason", None),
         }
 
     def turn(

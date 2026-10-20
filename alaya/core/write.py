@@ -225,6 +225,7 @@ def _project_extraction(
         "details": [],
     }
     ent_cache: dict[str, str] = {}
+    state_fact: dict[tuple[str, str], str] = {}
     for e in ext.entities:
         eid, created = _upsert_entity(conn, session_id, e.name, e.type, t_event, now)
         ent_cache[IDS.normalize(e.name)] = eid
@@ -243,9 +244,17 @@ def _project_extraction(
             out["invalidated"] += 1
         else:
             out["noop"] += 1
+        # 状态类事实 → 它驱动的那个槽（scope 归一 + slot_key），供下面的
+        # state_changes 认领归属；NOOP 也记，指向已有的那条事实。
+        slot_key = EX.STATE_PREDICATES.get(f.predicate)
+        if slot_key and act.get("fact"):
+            state_fact[(IDS.normalize(f.subject), slot_key)] = act["fact"]
 
     for s in ext.state_changes:
-        if _apply_state(conn, session_id, s, ent_cache, t_event, now):
+        # 同一条 episode 抽出的 state_changes 往往就是上面那条事实的投影；
+        # 有对应事实时把 fact id 带进槽，`correct()` 与 audit 才有线可查。
+        src = state_fact.get((IDS.normalize(s.scope), s.slot))
+        if _apply_state(conn, session_id, s, ent_cache, t_event, now, source_fact=src):
             out["states_changed"] += 1
 
     out["edges_touched"] = _group_theme(cfg, conn, session_id, ext, ep_id, ent_cache, t_event, now)
@@ -350,9 +359,20 @@ def _resolve_fact(
 
     if f.predicate in EX.STATE_PREDICATES and rows:
         # 状态类谓词：不同客体视为状态变更 → 旧条作废
-        for r in rows:
-            _invalidate(conn, r["id"], t_event, now, valid_to=vfrom)
-        new_id = _insert_fact(conn, session_id, subj_id, f, obj_ent, vfrom, ep_id, t_event, emb, embedder=embedder)
+        hist_end = _supersede(conn, rows, vfrom, t_event, now)
+        new_id, _inserted = _insert_fact(
+            conn, session_id, subj_id, f, obj_ent, vfrom, ep_id, t_event, emb,
+            embedder=embedder, valid_to=hist_end,
+        )
+        # 抽取只吐 facts、不吐 state_changes 时，槽只能由这里驱动。漏了这一步，
+        # 槽会停在旧值上、source_fact 还指着刚被作废的事实——检索里的「当前状态」
+        # 永远是老地址（真实 LLM 也不总记得吐 state_changes）。
+        if int(f.polarity) == 1:
+            _apply_state(
+                conn, session_id,
+                EX.StateCand(scope=f.subject, slot=EX.STATE_PREDICATES[f.predicate], value=f.obj),
+                ent_cache, t_event, now, source_fact=new_id,
+            )
         return {
             "action": "UPDATE",
             "fact": new_id,
@@ -364,9 +384,11 @@ def _resolve_fact(
     opposite = [r for r in same if int(r["polarity"]) != int(f.polarity)]
     if opposite:
         # 极性反转：旧条作废（保留原极性，历史不可篡改），新条另立
-        for r in opposite:
-            _invalidate(conn, r["id"], t_event, now, valid_to=vfrom)
-        new_id = _insert_fact(conn, session_id, subj_id, f, obj_ent, vfrom, ep_id, t_event, emb, embedder=embedder)
+        hist_end = _supersede(conn, opposite, vfrom, t_event, now)
+        new_id, _inserted = _insert_fact(
+            conn, session_id, subj_id, f, obj_ent, vfrom, ep_id, t_event, emb,
+            embedder=embedder, valid_to=hist_end,
+        )
         return {
             "action": "INVALIDATE",
             "fact": new_id,
@@ -375,7 +397,7 @@ def _resolve_fact(
             "predicate": f.predicate,
         }
 
-    new_id = _insert_fact(conn, session_id, subj_id, f, obj_ent, vfrom, ep_id, t_event, emb, embedder=embedder)
+    new_id, inserted = _insert_fact(conn, session_id, subj_id, f, obj_ent, vfrom, ep_id, t_event, emb, embedder=embedder)
 
     # 确定性兜底：位置/工作/关系类事实直接驱动状态槽。
     # 不能指望 LLM 记得产出 state_changes——它经常忘，而槽是检索的主干，
@@ -384,32 +406,66 @@ def _resolve_fact(
         _apply_state(
             conn, session_id,
             EX.StateCand(scope=f.subject, slot=EX.STATE_PREDICATES[f.predicate], value=f.obj),
-            ent_cache, t_event, now,
+            ent_cache, t_event, now, source_fact=new_id,
         )
 
+    if not inserted:
+        # 事实已经在库里（同主语/谓词/客体/起点/极性）：报 EXISTS，不冒充 ADD。
+        # 旧实现 INSERT OR IGNORE 之后照样返回 ADD，`added` 统计被灌水，
+        # 上层看到"又记住了一条"其实什么都没变。
+        return {"action": "EXISTS", "fact": new_id, "predicate": f.predicate}
     return {"action": "ADD", "fact": new_id, "predicate": f.predicate}
 
 
-def _insert_fact(conn, session_id: str, subj_id: str, f: EX.FactCand, obj_ent, vfrom: float, ep_id: str, now: float, emb: bytes | None = None, embedder=None) -> str:
+def _supersede(conn, rows, vfrom: float, t_event: float, now: float) -> float | None:
+    """按时间轴收口被新事实顶掉的旧事实，返回新事实该闭合到哪个时刻。
+
+    正常时序（`vfrom` 不早于旧条起点）：旧条在 `vfrom` 结束——它确实被取代了。
+    补录（`vfrom` 早于旧条起点）：**旧条不动**，它仍然有效到下一次变更；新事实
+    只占 `[vfrom, 旧条起点)` 这段历史，否则会写出
+    `t_valid_to < t_valid_from` 的负区间（"这条事实在它成立之前就失效了"）。
+    """
+    later = [float(r["t_valid_from"]) for r in rows if float(r["t_valid_from"]) > vfrom]
+    for r in rows:
+        if float(r["t_valid_from"]) <= vfrom:
+            _invalidate(conn, r["id"], t_event, now, valid_to=vfrom)
+    return min(later) if later else None
+
+
+def _insert_fact(conn, session_id: str, subj_id: str, f: EX.FactCand, obj_ent, vfrom: float, ep_id: str, now: float, emb: bytes | None = None, embedder=None, valid_to: float | None = None) -> tuple[str, bool]:
+    """插一条事实，返回 (fact_id, 是否真的插入)。
+
+    `INSERT OR IGNORE` 的 rowcount 是唯一的"到底插没插"证据：它被忽略时
+    不能继续插 FTS 行（会攒重复行），也不能向上报 ADD。
+
+    `valid_to` 非空表示这条是**补录的历史事实**：它当时为真、现在已经结束，
+    所以直接以 invalidated + 闭合区间落库，不抢占"当前有效"的位置。
+    """
     fid = IDS.fact_id(session_id, IDS.normalize(f.subject), f.predicate, f.obj, vfrom, f.polarity)
     model_id, dim = embedding_identity(embedder) if emb is not None else (None, None)
-    conn.execute(
+    status = "active" if valid_to is None else "invalidated"
+    if valid_to is not None and valid_to < vfrom:  # 不变式：闭区间不得为负
+        valid_to = vfrom
+    cur = conn.execute(
         """INSERT OR IGNORE INTO fact
            (id,session_id,subject_id,predicate,object_text,object_entity_id,polarity,confidence,
             t_valid_from,t_valid_to,t_ingest,t_invalid,status,source_episode,salience,embedding,
             embed_model,embed_dim)
-           VALUES(?,?,?,?,?,?,?,?,?,NULL,?,NULL,'active',?,?,?,?,?)""",
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
             fid, session_id, subj_id, f.predicate, f.obj, obj_ent,
-            f.polarity, f.confidence, vfrom, now, ep_id,
+            f.polarity, f.confidence, vfrom, valid_to, now,
+            now if valid_to is not None else None, status, ep_id,
             min(1.0, 0.45 + 0.35 * f.confidence), emb, model_id, dim,
         ),
     )
+    if cur.rowcount <= 0:
+        return fid, False
     conn.execute(
         "INSERT INTO fact_fts(fact_id,tokens) VALUES(?,?)",
         (fid, " ".join(TX.tokenize(f"{f.predicate} {f.obj}"))),
     )
-    return fid
+    return fid, True
 
 
 def _invalidate(conn, fact_id: str, t_event: float, now: float, valid_to: float | None = None) -> None:
@@ -418,16 +474,66 @@ def _invalidate(conn, fact_id: str, t_event: float, now: float, valid_to: float 
     `t_invalid` 是系统时间（我们何时判定它失效），`t_valid_to` 是世界时间
     （它在真实世界里何时不再为真）。两者分开：前者用 now，后者用**新事实的
     起始时刻**——用事件时间会产生"旧值和新值同时为真"的窗口。
+
+    `MAX(?, t_valid_from)` 是区间不变式：`t_valid_to` 永远不早于 `t_valid_from`。
+    正常时序下它是恒等操作；补录场景若还有人传进更早的时刻，宁可收紧到起点，
+    也不留一条"在成立之前就失效"的负区间。
     """
     conn.execute(
         """UPDATE fact SET status='invalidated', t_invalid=?,
-                          t_valid_to=? WHERE id=?""",
+                          t_valid_to=MAX(COALESCE(?, t_valid_from), t_valid_from)
+           WHERE id=?""",
         (now, valid_to if valid_to is not None else t_event, fact_id),
     )
 
 
 # ── 状态槽 ────────────────────────────────────────────────────
-def _apply_state(conn, session_id: str, s: EX.StateCand, ent_cache: dict[str, str], t_event: float, now: float) -> bool:
+def _insert_slot(
+    conn,
+    session_id: str,
+    scope_id: str,
+    slot_key: str,
+    value: str,
+    since: float,
+    until: float | None,
+    source_fact: str | None,
+    now: float,
+) -> bool:
+    """写一条槽。区间合法性由调用方保证，这里只做最后一道拦截。"""
+    if until is not None and until < since:
+        # 不变式（A-3）：槽区间不许为负。走到这支说明上面的分支判断有漏，
+        # 宁可丢一条历史槽，也不往库里写"结束早于开始"的状态。
+        log.warning(
+            "state_slot 负区间已拒绝：%s=%s since=%s until=%s", slot_key, value, since, until
+        )
+        return False
+    sid_slot = IDS.slot_id(session_id, scope_id, slot_key, since, value)
+    sql = """INSERT INTO state_slot(id,session_id,scope,slot_key,value_text,since,until,source_fact,confidence)
+             VALUES(?,?,?,?,?,?,?,?,0.75)"""
+    try:
+        conn.execute(sql, (sid_slot, session_id, scope_id, slot_key, value, since, until, source_fact))
+    except sqlite3.IntegrityError:
+        # 回填或同毫秒重入时 id 可能撞上已关闭的旧槽。
+        # 不能 OR IGNORE（那会静默丢掉整条状态），换一个 id 再插。
+        alt = "sl_" + IDS._digest(sid_slot, since, now)
+        conn.execute(sql, (alt, session_id, scope_id, slot_key, value, since, until, source_fact))
+    return True
+
+
+def _apply_state(
+    conn,
+    session_id: str,
+    s: EX.StateCand,
+    ent_cache: dict[str, str],
+    t_event: float,
+    now: float,
+    source_fact: str | None = None,
+) -> bool:
+    """落一条状态槽，返回是否写入。
+
+    `source_fact` 记「这个槽由哪条事实推出」：`correct()` 的槽失效与 audit 的
+    stale_state 都靠它串联，之前该列恒 NULL，两条链路永久空跑。
+    """
     scope_norm = IDS.normalize(s.scope)
     scope_id = ent_cache.get(scope_norm)
     if not scope_id:
@@ -444,20 +550,28 @@ def _apply_state(conn, session_id: str, s: EX.StateCand, ent_cache: dict[str, st
     if cur and IDS.normalize(cur["value_text"]) == IDS.normalize(s.value):
         return False
 
-    if cur:
-        conn.execute("UPDATE state_slot SET until=? WHERE id=?", (t_event, cur["id"]))
+    if cur is None:
+        return _insert_slot(conn, session_id, scope_id, s.slot, s.value, t_event, None, source_fact, now)
 
-    sid_slot = IDS.slot_id(session_id, scope_id, s.slot, t_event, s.value)
-    sql = """INSERT INTO state_slot(id,session_id,scope,slot_key,value_text,since,until,confidence)
-             VALUES(?,?,?,?,?,?,NULL,0.75)"""
-    try:
-        conn.execute(sql, (sid_slot, session_id, scope_id, s.slot, s.value, t_event))
-    except sqlite3.IntegrityError:
-        # 回填或同毫秒重入时 id 可能撞上已关闭的旧槽。
-        # 不能 OR IGNORE（那会静默丢掉整条状态），换一个 id 再插。
-        alt = "sl_" + IDS._digest(sid_slot, t_event, now)
-        conn.execute(sql, (alt, session_id, scope_id, s.slot, s.value, t_event))
-    return True
+    if t_event >= cur["since"]:
+        # 正常时序：旧槽关在事件时刻，新槽从事件时刻开始
+        conn.execute("UPDATE state_slot SET until=? WHERE id=?", (t_event, cur["id"]))
+        return _insert_slot(conn, session_id, scope_id, s.slot, s.value, t_event, None, source_fact, now)
+
+    # 补录的历史时刻早于当前槽起点：**不许**拿它关掉当前槽。否则历史状态会
+    # 顶替当前真理，同时制造 until < since 的负区间。只插一个已闭合的
+    # 历史槽 [t_event, cur.since)，当前槽原样保留。
+    covered = conn.execute(
+        """SELECT value_text FROM state_slot
+           WHERE session_id=? AND scope=? AND slot_key=?
+             AND since <= ? AND (until IS NULL OR until > ?)""",
+        (session_id, scope_id, s.slot, t_event, t_event),
+    ).fetchall()
+    if any(IDS.normalize(r["value_text"]) == IDS.normalize(s.value) for r in covered):
+        return False
+    return _insert_slot(
+        conn, session_id, scope_id, s.slot, s.value, t_event, cur["since"], source_fact, now
+    )
 
 
 # ── 主题超边 ──────────────────────────────────────────────────

@@ -450,13 +450,12 @@ def cmd_models(args) -> int:
 
 
 def cmd_backup(args) -> int:
-    """备份记忆库：WAL 模式不能直接复制文件，先 checkpoint 再拷，并记录 sha256。
+    """备份记忆库：走 SQLite 在线备份 API 并自检，打印行数与 sha256。
 
+    为什么不是「checkpoint 后复制文件」：并发读者在场时 checkpoint 会 busy，
+    WAL 里没合并的帧进不了主库文件，复制出来的 .bak 缺数据却报成功。
     恢复：停掉服务/daemon，把备份复制回目标路径（并删掉同目录的 -wal / -shm）即可。
     """
-    import hashlib
-    import shutil
-
     from .core import db as DB
 
     db_path = args.db or os.environ.get("ALAYA_DB") or "alaya.db"
@@ -465,23 +464,14 @@ def cmd_backup(args) -> int:
         return 1
     size_mb = os.path.getsize(db_path) / 1048576
     try:
-        conn = DB.connect(db_path)
-        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-    except Exception as e:
-        print(f"checkpoint 失败（库可能正被占用）：{type(e).__name__}: {e}")
+        info = DB.backup_db(db_path, args.out)
+    except DB.BackupError as e:
+        print(f"备份失败：{e}")
         return 1
-    out = args.out or f"{db_path}.{time.strftime('%Y%m%d-%H%M%S')}.bak"
-    try:
-        shutil.copy2(db_path, out)
-    except OSError as e:
-        print(f"复制失败：{e}")
-        return 1
-    sha = hashlib.sha256()
-    with open(out, "rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 20), b""):
-            sha.update(chunk)
-    print(f"已备份 {db_path}（{size_mb:.1f} MB）→ {out}")
-    print(f"sha256: {sha.hexdigest()}")
+    rows = ", ".join(f"{t}={n}" for t, n in info["tables"].items())
+    print(f"已备份 {db_path}（{size_mb:.1f} MB）→ {info['path']}")
+    print(f"行数：{rows}")
+    print(f"sha256: {info['sha256']}")
     return 0
 
 

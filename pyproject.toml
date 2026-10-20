@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "alaya-memory"
-version = "1.1.0"
+version = "1.1.1"
 description = "藏识 Alaya — 长期陪伴 AI 的记忆器官：五层记忆投影、预算约束检索、语义场、主被动一体记忆"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -22,14 +22,16 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
   "Operating System :: OS Independent",
 ]
-dependencies = []
+dependencies = ["numpy>=1.24"]
 
 [project.optional-dependencies]
-# 核心只用标准库；numpy 为可选的向量加速，缺失时走纯 Python 兜底
+# numpy 已是默认依赖：这个 extra 只作为「老安装命令继续可用」的兼容壳，
+# `pip install -e ".[numpy]"` 不会报错，也不会多装东西。
 numpy = ["numpy>=1.24"]
 # HTTP 服务形态（alaya serve）
 serve = ["fastapi>=0.110", "uvicorn>=0.27", "pydantic>=2", "jieba>=0.42"]
-# 本地语义向量（模型本身不打包，用 `alaya models install` 下载）
+# 本地语义向量：当前**无推理侧消费者**（见 docs/17 §8.1，`local` 通道待交付）。
+# extra 保留只为不破坏既有安装命令 `pip install -e ".[embed]"`。
 embed = ["onnxruntime>=1.18", "tokenizers>=0.15"]
 # 本地开发与评测
 dev = ["numpy>=1.24", "fastapi>=0.110", "uvicorn>=0.27", "pydantic>=2", "jieba>=0.42"]

@@ -7,7 +7,7 @@
 服务形态见 alaya.service.app。
 """
 
-__version__ = "1.1.0"
+__version__ = "1.1.1"
 api_version = "1"
 
 __all__ = [

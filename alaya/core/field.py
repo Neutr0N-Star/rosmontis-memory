@@ -172,6 +172,21 @@ def _calibrate(cos: float) -> float:
     return max(0.05, min(1.0, (x - 0.20) / 0.55))
 
 
+def _fact_live(alias: str = "") -> str:
+    """事实的时间轴判据（与 recall.py 的三路召回同口径），占两个 `as_of` 参数。
+
+    - 有效性是区间：`as_of` 落在 `[t_valid_from, t_valid_to)` 内就是当时为真，
+      后来被订正不该让它在历史查询里消失；
+    - 但 `invalidated` 且区间没有终点（mute / forget 直接改 status）的"死事实"
+      永远排除——无法证明它当时真到什么时候，放进来等于让死事实复活。
+    """
+    a = f"{alias}." if alias else ""
+    return (
+        f"{a}t_valid_from <= ? AND ({a}t_valid_to IS NULL OR {a}t_valid_to > ?) "
+        f"AND ({a}status='active' OR {a}t_valid_to IS NOT NULL)"
+    )
+
+
 def _vec_seeds(cfg, embedder, query: str, sid: str, as_of: float, k: int) -> list[tuple[str, float]]:
     """向量 kNN 点火。embedder 缺失、降级、维度不符都只是少一路，不抛出。"""
     if embedder is None or k <= 0:
@@ -183,20 +198,23 @@ def _vec_seeds(cfg, embedder, query: str, sid: str, as_of: float, k: int) -> lis
         return []
     if not blob:
         return []
-    need = int(cfg.embed_dim) * 4
+    # 能不能比看查询向量自己的长度：cfg.embed_dim 是配置猜测，与模型维度不一致
+    # 时按它判会把整库向量判成坏数据（与 recall._dense 同口径）。
+    need = len(blob)
     out: list[tuple[float, str]] = []
     try:
         with DB.reader(cfg.db_path) as conn:
-            for table, kind, extra in (
-                ("fact", "fact", "status!='invalidated'"),
-                ("episode", "episode", "archived=0 AND source!='dream'"),
+            for table, kind, extra, extra_args in (
+                # 事实的有效性见 _fact_live：区间判定 + 死事实排除
+                ("fact", "fact", _fact_live(), (as_of, as_of)),
+                ("episode", "episode", "(archived=0 AND source!='dream')", ()),
             ):
                 rows = conn.execute(
                     f"""SELECT id, embedding FROM {table}
                         WHERE (?='*' OR session_id=?) AND embedding IS NOT NULL
                           AND t_ingest<=? AND {extra}
                         ORDER BY t_ingest DESC LIMIT 20000""",
-                    (sid, sid, as_of),
+                    (sid, sid, as_of, *extra_args),
                 ).fetchall()
                 if not rows:
                     continue
@@ -231,9 +249,12 @@ def _fts_seeds(cfg, query: str, sid: str, as_of: float, k: int) -> list[tuple[st
     out: list[tuple[str, float]] = []
     try:
         with DB.reader(cfg.db_path) as conn:
-            for fts, kind, table, idcol, extra in (
-                ("fact_fts", "fact", "fact", "fact_id", "t.status!='invalidated'"),
-                ("episode_fts", "episode", "episode", "episode_id", "t.archived=0 AND t.source!='dream'"),
+            for fts, kind, table, idcol, extra, extra_args in (
+                ("fact_fts", "fact", "fact", "fact_id", _fact_live("t"), (as_of, as_of)),
+                (
+                    "episode_fts", "episode", "episode", "episode_id",
+                    "(t.archived=0 AND t.source!='dream')", (),
+                ),
             ):
                 rows = conn.execute(
                     f"""SELECT t.id AS rid FROM {fts} f
@@ -241,7 +262,7 @@ def _fts_seeds(cfg, query: str, sid: str, as_of: float, k: int) -> list[tuple[st
                         WHERE {fts} MATCH ? AND (?='*' OR t.session_id=?)
                           AND t.t_ingest<=? AND {extra}
                         ORDER BY rank LIMIT ?""",
-                    (fq, sid, sid, as_of, int(k)),
+                    (fq, sid, sid, as_of, *extra_args, int(k)),
                 ).fetchall()
                 for pos, r in enumerate(rows):
                     # 排名越靠前点火越强；最低保留 0.30，免得 FTS 长尾没有扩散价值。
@@ -261,17 +282,22 @@ def _entity_seeds(cfg, query: str, sid: str, as_of: float) -> list[tuple[str, fl
     toks = TX.tokenize(query)
     if not toks:
         return []
-    qlow = (query or "").strip().lower()
+    ltok = [t.lower() for t in toks][:8]
     out: list[tuple[str, float]] = []
     try:
         with DB.reader(cfg.db_path) as conn:
+            # 规范化名精确命中 + 每个 token 的前缀兜底。原先对全表逐行做子串
+            # 比较（20k entity 实测 2.06ms），现在两个条件都能走 norm_name 索引
+            # （0.01ms）。前缀这一支负责"token 是实体名的一部分"的情形，
+            # 例如 token=字节 命中实体「字节跳动」——去掉它召回会明显掉。
+            likes = " OR ".join(["norm_name LIKE ?"] * len(ltok))
             rows = conn.execute(
                 f"""SELECT id, name, norm_name, salience FROM entity
                     WHERE (?='*' OR session_id=?)
-                      AND (norm_name IN ({_marks(len(toks))})
-                           OR (length(norm_name)>=2 AND instr(?, norm_name)>0))
+                      AND (norm_name IN ({_marks(len(ltok))})
+                           OR (length(norm_name)>=2 AND ({likes})))
                     ORDER BY salience DESC, mentions DESC LIMIT 16""",
-                (sid, sid, *[t.lower() for t in toks], qlow),
+                (sid, sid, *ltok, *[t + "%" for t in ltok]),
             ).fetchall()
             ent_ids: list[str] = []
             for r in rows:
@@ -284,9 +310,10 @@ def _entity_seeds(cfg, query: str, sid: str, as_of: float) -> list[tuple[str, fl
                 f"""SELECT id, source_episode FROM fact
                     WHERE (subject_id IN ({_marks(len(ent_ids))})
                            OR object_entity_id IN ({_marks(len(ent_ids))}))
-                      AND status!='invalidated' AND t_ingest<=?
+                      AND {_fact_live()}
+                      AND t_ingest<=?
                     ORDER BY salience DESC LIMIT 24""",
-                (*ent_ids, *ent_ids, as_of),
+                (*ent_ids, *ent_ids, as_of, as_of, as_of),
             ).fetchall()
             # fact 的溯源 episode 直接在同一批行里带回，少一次往返。
             seen_eps: list[str] = []
@@ -456,9 +483,11 @@ def _fact_edges(conn, buckets: dict[str, list[str]], as_of: float, adj, kinds: s
     try:
         rows = conn.execute(
             f"""SELECT id, subject_id, object_entity_id, source_episode FROM fact
-                WHERE ({' OR '.join(conds)}) AND status!='invalidated' AND t_ingest<=?
+                WHERE ({' OR '.join(conds)})
+                  AND {_fact_live()}
+                  AND t_ingest<=?
                 ORDER BY salience DESC LIMIT 600""",
-            (*params, as_of),
+            (*params, as_of, as_of, as_of),
         ).fetchall()
     except Exception as e:  # 脏数据/缺列只少一类边
         log.debug("field fact edge query failed: %s", e)

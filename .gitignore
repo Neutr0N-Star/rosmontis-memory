@@ -17,3 +17,6 @@ dist/
 build/
 *.egg-info/
 docs/_wip/
+
+# 多智能体流水线的过程产物（审查/实现报告、探针脚本、临时库）
+.agent-runs/

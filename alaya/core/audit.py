@@ -115,7 +115,28 @@ def audit(cfg: Config, session_id: str | None = None, now: float | None = None) 
                 "hint": "状态快照与事实层不一致，需要重建",
             })
 
-        # 6 拒答率过高 —— 说明抽取或召回有问题
+        # 6 时间区间为负 —— "这条记录在自己成立之前就结束了"
+        # 补录/乱序写入最容易写出这种行：状态槽与事实层各查一遍，任一非零都报。
+        neg = q(
+            """SELECT COUNT(*) c FROM (
+                   SELECT 1 FROM fact
+                    WHERE (?='*' OR session_id=?) AND t_valid_to IS NOT NULL
+                      AND t_valid_to < t_valid_from
+                   UNION ALL
+                   SELECT 1 FROM state_slot
+                    WHERE (?='*' OR session_id=?) AND until IS NOT NULL AND until < since
+               )""",
+            sid, sid, sid, sid,
+        )[0]["c"]
+        if neg:
+            issues.append({
+                "type": "negative_interval",
+                "severity": "high",
+                "detail": f"{neg} 条事实/状态的时间区间为负（结束时刻早于开始时刻）",
+                "hint": "补录或乱序写入把区间写反了，需要按时间轴重建；写入侧应拦住这种行",
+            })
+
+        # 7 拒答率过高 —— 说明抽取或召回有问题
         recent = q(
             """SELECT COUNT(*) c, SUM(abstained) a FROM retrieval_log
                WHERE ts > ?""",

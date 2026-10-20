@@ -80,7 +80,7 @@ def cmd_serve(args) -> int:
             timeout=_cfg.embed_timeout,
             model_id=_cfg.embed_model_id,
         )
-    except Exception as e:  # 含 AlayaError("embed_provider_unavailable")
+    except Exception as e:  # 含 EmbedProviderError（AlayaError 子类）等启动期错误
         code = getattr(e, "code", "")
         msg = getattr(e, "message", None) or str(e)
         print(f"拒绝启动：{f'[{code}] ' if code else ''}{msg}", file=sys.stderr)

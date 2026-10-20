@@ -12,30 +12,7 @@
 
 ## [2.0.0] - 2026-10-20
 
-**改名版本。** 项目原名 `Alaya`，与既有同名项目冲突（存在更早的、功能相近的同名项目，会造成检索与安装混淆），故整体更名为 **Rosmontis**。发行名取 `rosmontis-memory`，因为 PyPI 上的 `rosmontis` 已被一个无关的 graphviz 绘图工具占用；Python 包名与 CLI 用 `rosmontis`。本版包含 1.1.1 的全部修复（1.1.1 未公开发布，仅存在于本地提交）。
-
-### BREAKING CHANGES（迁移必读）
-
-| 项目 | 旧 | 新 |
-|---|---|---|
-| Python 包 | `import alaya` | `import rosmontis` |
-| 发行名 | `alaya-memory` | `rosmontis-memory` |
-| CLI | `alaya serve` | `rosmontis serve` |
-| 环境变量前缀 | `ALAYA_*`（约 30 个） | `ROSMONTIS_*` |
-| 默认库文件 | `alaya.db` | `rosmontis.db` |
-| 配置/模型目录 | `~/.alaya` | `~/.rosmontis` |
-
-- **库文件格式未变**：旧的 `alaya.db` 可以直接用 `rosmontis.open("alaya.db")` 打开，不需要迁移。
-- **环境变量必须改名**：`ALAYA_EMBED` → `ROSMONTIS_EMBED`，以此类推。旧前缀不保留别名（项目此前未发布，无存量用户）。
-- **`api_version` 保持 `"1"`**：HTTP `/v1/*` 端点、五个工具名、错误信封均未变，本次改名只影响 Python 包层。
-
-### Fixed（同 1.1.1）
-
-见下方 `[1.1.1]` 节。核心是三条数据正确性（订正联动、补录不篡改当前真理、`as_of` 时态）、换模型后可恢复、备份不再静默产出空文件、未知 embedding provider 启动即失败。
-
-## [1.1.1] - 2026-10-20（未公开发布，内容并入 2.0.0）
-
-修一批「声明了不变量、实现没接上、指标还全绿」的问题。这类问题不崩不报错，但数据是错的，所以单独发一个补丁版本。
+**Rosmontis 的首个公开发布版本**，包含此前本地迭代的全部修复。`api_version` 为 `"1"`：HTTP `/v1/*` 端点、五个工具名与错误信封，从这一版起就是对外契约。
 
 ### Fixed · 数据正确性
 

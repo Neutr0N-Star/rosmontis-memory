@@ -6,8 +6,6 @@ __pycache__/
 *.pyc
 demo.db*
 rosmontis.db*
-# 改名前的旧库文件名：本地仍有存量数据文件，必须继续忽略，否则会被误提交
-alaya.db*
 .review/
 .env
 .env.*
@@ -22,3 +20,6 @@ docs/_wip/
 
 # 多智能体流水线的过程产物（审查/实现报告、探针脚本、临时库）
 .agent-runs/
+
+# ⚠️ 临时保护：本地真库仍叫 alaya.db（文件被进程占用暂未改名），改名后删除本条
+alaya.db*

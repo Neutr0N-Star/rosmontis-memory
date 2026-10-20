@@ -1,4 +1,4 @@
-# Alaya 快速开始（库形态）
+﻿# Alaya 快速开始（库形态）
 
 目标：不联网、不装模型，从零到「写下第一条记忆 → 下一轮能取回 → 正常打烊」。
 全流程只需要 Python 3.10+ 和带 FTS5 的 SQLite；服务形态（HTTP / 可视化）另见 [operations.md](operations.md)。
@@ -40,7 +40,7 @@ export PYTHONPATH="$PWD"
 python -c "import alaya; print(alaya.__version__, alaya.api_version)"
 ```
 
-预期输出 `1.0.0 1`（包版本 / 公共 API 版本，见 `alaya/__init__.py:10-11`）。
+预期输出 `1.1.0 1`（包版本 / 公共 API 版本，见 `alaya/__init__.py:10-11`）。
 
 也可以在脚本开头直接加路径：
 
@@ -234,7 +234,7 @@ with alaya.open("my_memory.db", {"embed_provider": "hash", "llm_hot": "rule"}) a
 ```
 
 - SQLite 是 WAL 模式，磁盘上可能出现 `my_memory.db-wal` / `my_memory.db-shm`。**不要只删主库文件**；停掉进程后三个一起清，或按 [operations.md](operations.md) 的备份/恢复流程处理。
-- 生产库第一次被 `alaya.open()` 打开时会自动执行 schema 迁移（v2 → v3，`alaya/core/db.py:77-122`）。已有 `alaya.db` 时先备份，见 [operations.md](operations.md)。
+- 生产库第一次被 `alaya.open()` 打开时会自动执行 schema 迁移（v2 → v4，`alaya/core/db.py:77-122`）。已有 `alaya.db` 时先备份，见 [operations.md](operations.md)。
 
 ## 5. 常见错误
 
@@ -255,7 +255,7 @@ with alaya.open("my_memory.db", {"embed_provider": "hash", "llm_hot": "rule"}) a
 # 1) 四钩子示例（临时库，不联网）
 python examples/hooks_demo.py
 
-# 2) 全量测试（6 个文件共 93 项；全部用临时库，不写 alaya.db）
+# 2) 全量测试（全部测试文件共 184 项；全部用临时库，不写 alaya.db）
 python -m unittest discover -s tests -p "test_*.py"
 ```
 
@@ -265,5 +265,9 @@ python -m unittest discover -s tests -p "test_*.py"
 ## 7. 下一步
 
 - 接口细节（每个参数/返回/副作用）：[api-reference.md](api-reference.md)
-- 备份恢复、v2→v3 迁移、降级、日志、排障：[operations.md](operations.md)
+- 备份恢复、v2→v4 迁移、降级、日志、排障：[operations.md](operations.md)
 - Harness 设计：`docs/12-harness设计.md`；主被动整合口径：`docs/14-主被动记忆原生整合方案.md`
+
+
+
+

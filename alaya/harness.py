@@ -45,6 +45,20 @@ MAX_TOOL_ROUNDS = 3
 MAX_HISTORY_MESSAGES = 40
 
 
+class LLMUnavailableError(RuntimeError):
+    """没有真实模型输出：`llm_callable` 未配置 / 调用失败 / 返回既无 content 也无 tool_calls。
+
+    引擎层的明确信号：调用方（`alaya.api.Handle` / HTTP 层）据此回 `llm_unavailable`
+    与 503，**绝不**把占位文本当回复写进长期记忆。
+    """
+
+    code = "llm_unavailable"
+    retryable = True
+
+    def __init__(self, message: str = "没有真实模型输出"):
+        super().__init__(message)
+
+
 @dataclass
 class TurnResult:
     reply: str
@@ -614,7 +628,20 @@ class Harness:
         }
 
         messages = self._build_messages(ctx, text, history=history, extra_system=extra_system)
-        reply, tools_called, rounds, usage, finish_reason = self._run_loop(messages, session_id)
+        try:
+            reply, tools_called, rounds, usage, finish_reason = self._run_loop(messages, session_id)
+        except LLMUnavailableError as e:
+            # 已经发过 meta，只能把错误作为事件送出；不写 assistant 行、不发 done。
+            yield {
+                "event": "error",
+                "data": {
+                    "code": getattr(e, "code", "llm_unavailable"),
+                    "retryable": bool(getattr(e, "retryable", True)),
+                    "status": 503,
+                    "message": str(e)[:300],
+                },
+            }
+            return
 
         for call in tools_called:
             yield {"event": "tool", "data": call}
@@ -681,7 +708,8 @@ class Harness:
         self, messages: list[dict], session_id: str
     ) -> tuple[str, list[dict], int, dict, str | None]:
         if self.llm is None:
-            return "（没有接模型）", [], 1, {}, None
+            # 没接模型就不该有"她说过的话"：抛明确错误，不写 assistant 行。
+            raise LLMUnavailableError("llm_callable 未配置：没有真实模型输出")
 
         called: list[dict] = []
         reply = ""
@@ -690,9 +718,11 @@ class Harness:
         for round_no in range(self.max_tool_rounds):
             try:
                 resp = self.llm(messages, TOOLS)
+            except LLMUnavailableError:
+                raise
             except Exception as e:
                 log.warning("llm call failed: %s", e)
-                return f"（模型调用失败：{type(e).__name__}）", called, round_no + 1, usage, finish_reason
+                raise LLMUnavailableError(f"模型调用失败：{type(e).__name__}: {e}") from e
 
             resp = resp if isinstance(resp, dict) else {}
             content = (resp.get("content") or "").strip()
@@ -702,9 +732,8 @@ class Harness:
                 finish_reason = resp.get("finish_reason")
 
             if not content and not calls:
-                # 模型返回空：可能是不可用、超时、或拒绝回答。
-                # 不能当成正常回复往下走（会写进记忆），必须往上抛。
-                raise RuntimeError("模型没有返回内容")
+                # 模型返回空：不可用、超时、或拒绝回答。不能落库成"她说过的话"。
+                raise LLMUnavailableError("模型返回既无 content 也无 tool_calls")
 
             if content:
                 reply = content
@@ -746,17 +775,19 @@ class Harness:
                     }
                 )
 
-        # 工具轮次用完，让她带着已有结果收尾
+        # 工具轮次用完，让她带着已有结果收尾；仍没有内容 → 同样是"模型不可用"
         try:
             resp = self.llm(messages, None)
-            resp = resp if isinstance(resp, dict) else {}
-            reply = (resp.get("content") or "").strip() or reply
-            usage = _merge_usage(usage, resp.get("usage"))
-            if resp.get("finish_reason"):
-                finish_reason = resp.get("finish_reason")
-        except Exception:
-            pass
-        return reply or "（工具调用达到上限）", called, self.max_tool_rounds, usage, finish_reason
+        except Exception as e:
+            raise LLMUnavailableError(f"模型调用失败：{type(e).__name__}: {e}") from e
+        resp = resp if isinstance(resp, dict) else {}
+        final = (resp.get("content") or "").strip() or reply
+        usage = _merge_usage(usage, resp.get("usage"))
+        if resp.get("finish_reason"):
+            finish_reason = resp.get("finish_reason")
+        if not final:
+            raise LLMUnavailableError("工具轮次用尽仍未收到内容")
+        return final, called, self.max_tool_rounds, usage, finish_reason
 
     # ── 眠 ────────────────────────────────────────────────
     def sleep(self, session_id: str = "default") -> dict:

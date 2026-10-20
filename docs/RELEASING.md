@@ -1,4 +1,4 @@
-# 发布流程（RELEASING）
+﻿# 发布流程（RELEASING）
 
 本项目是「本地客户端 + 开源库」形态，发布 = 打一个可安装的 wheel + 一个 git tag + 一份变更日志。
 不用发容器镜像也能用；镜像可选。
@@ -60,4 +60,5 @@ GitHub Release 正文直接取 `CHANGELOG.md` 对应小节；附 `dist/*.whl` �
 ## 6 发布后
 
 - 在干净机器/容器里按 README 走一遍「10 分钟接入」。
-- 记录发布验证结论到 `docs/_wip/C3-发布验证报告.md`（或后续同类报告）。
+- 记录发布验证结论到 `bench/report.md` 与 `CHANGELOG.md`。
+

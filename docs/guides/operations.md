@@ -1,6 +1,6 @@
-# Alaya 运维手册
+﻿# Alaya 运维手册
 
-覆盖：备份/恢复、v2→v3 迁移、降级矩阵、日志与指标、常见故障、数据清理。
+覆盖：备份/恢复、v2→v4 迁移、降级矩阵、日志与指标、常见故障、数据清理。
 库接入示例见 [quickstart-library.md](quickstart-library.md)；完整参数与配置表见 [api-reference.md](api-reference.md)。
 
 > 纪律：`alaya.db` 只许只读，任何写操作先在**副本**上演练；迁移前必须 checkpoint + 备份。
@@ -52,7 +52,7 @@ python -c "import sqlite3; c=sqlite3.connect('alaya-backup-20261019.db'); print(
 
 - **不要**在未 checkpoint、未停写的情况下直接 `copy alaya.db`：WAL 里已提交的数据可能不在主文件。
 - 备份后检查 `integrity_check` 返回 `ok`、`user_version` 符合预期（当前真库见 §4.0）。
-- 备份保留策略由使用方定；迁移前后各留一份（`docs/_wip/A2-整合方案.md` §7.2 建议保留到验收后）。
+- 备份保留策略由使用方定；迁移前后各留一份（建议保留到验收后）。
 
 ### 3.2 恢复
 
@@ -67,9 +67,9 @@ python -c "import sqlite3; c=sqlite3.connect('alaya.db'); print(c.execute('PRAGM
 ```
 
 自检：`GET /health` 返回 ok；`GET /v1/stats` 的 `episode/fact/entity` 与备份时记录一致；`GET /v1/audit` 无 high 问题。
-恢复旧版本备份时，代码版本要一起回退（schema v2 备份 + v3 代码会触发迁移，不是「恢复原状」）。
+恢复旧版本备份时，代码版本要一起回退（schema v2 备份 + v4 代码会触发迁移，不是「恢复原状」）。
 
-## 4. v2 → v3 迁移
+## 4. v2 → v4 迁移
 
 ### 4.0 当前状态（只读核对）
 
@@ -80,7 +80,7 @@ alaya.db  user_version=2  episode=182
 demo.db   user_version=2  episode=9
 ```
 
-（只读 `mode=ro` 查询；未迁移、未写入。）首次用 `Memory()`/`alaya.open()` 打开它们时，`DB.init_db` 会自动迁移到 v3（`alaya/core/db.py:77-122`）。
+（只读 `mode=ro` 查询；未迁移、未写入。）首次用 `Memory()`/`alaya.open()` 打开它们时，`DB.init_db` 会自动迁移到 v4（v2→v3→v4 两步，`alaya/core/db.py:77-122`）。
 
 ### 4.1 迁移做了什么
 
@@ -112,9 +112,9 @@ python run.py audit
 ### 4.3 回滚
 
 - 首选：停服，用迁移前备份恢复（§3.2）。
-- 只回代码不回库也是允许的：v2 代码不读 v3 新列，`state` 可能陈旧；再升级需按 `origin IS NULL / state_at` 重跑回填（`docs/_wip/A2-整合方案.md` §3.6）。
+- 只回代码不回库也是允许的：v2 代码不读 v3 新列，`state` 可能陈旧；再升级需按 `origin IS NULL / state_at` 重跑回填（见 `docs/15-交付蓝图与模块契约.md` §3.6）。
 - **不做 DROP COLUMN**（SQLite 版本依赖 + 数据风险）；迁移只加不删。
-- 迁移失败时日志会出现 `migration v2 → v3 failed, rolled back`，库仍是 v2；先看异常，再重试，不要手工改 `user_version`。
+- 迁移失败时日志会出现 `migration v2 → v4 failed, rolled back`，库仍是 v2；先看异常，再重试，不要手工改 `user_version`。
 
 ### 4.4 迁移后的检查表
 
@@ -122,7 +122,7 @@ python run.py audit
 - `episode` 行数与迁移前一致；`item_state_log` 条数 = episode 条数（每行至少一条 backfill，`db.py:281-291`）。
 - `source='dream'` 的行是 `state='dream'`、`origin='dream'`。
 - `PRAGMA integrity_check` = `ok`。
-- 现有测试全绿：`python -m unittest discover -s tests -p "test_*.py"`（93 项）。
+- 现有测试全绿：`python -m unittest discover -s tests -p "test_*.py"`（184 项）。
 
 ## 5. 降级矩阵
 
@@ -191,7 +191,7 @@ PYTHONIOENCODING=utf-8 python bench/pareto.py                   # 配置网格 �
 - 评测库建在系统临时目录，跑完删除，**不碰 `alaya.db`**（`bench/run_eval.py` 文件头）。
 - 缺 Ollama/网络会自动回退「脚本化金标 + 规则抽取 + hash 向量」，并写进 JSON 的 `meta.*_backend`。
 - `bench/report.md` 由脚本生成，禁止手填数字。
-- 设计目标与判据：`docs/15-交付蓝图与模块契约.md` §2；当前结论：`docs/_wip/A8-评测报告.md`、`bench/report.md`。
+- 设计目标与判据：`docs/15-交付蓝图与模块契约.md` §2；当前结论：`bench/report.md`。
 
 ## 7. 常见故障
 
@@ -222,7 +222,16 @@ PYTHONIOENCODING=utf-8 python bench/pareto.py                   # 配置网格 �
 ## 9. 上线/变更演练清单
 
 1. 备份 + checkpoint + 记录 `sha256`/`user_version`。
-2. 在副本上跑迁移与 `integrity_check`；跑 `python -m unittest discover -s tests -p "test_*.py"`（93 项）。
+2. 在副本上跑迁移与 `integrity_check`；跑 `python -m unittest discover -s tests -p "test_*.py"`（184 项）。
 3. 记录基线：`/v1/stats`、`/v1/audit`、20 条固定查询的 `retrieval_log`（当前 `Memory.recall` 会写库，基线只用副本 + 冻结时钟）。
 4. 变更后复核：`/health`、`/v1/stats`、`/v1/audit`、固定查询命中率/延迟。
 5. 保留迁移前/后两份备份直到验收完成；回滚预案见 §4.3。
+
+
+
+
+
+
+
+
+

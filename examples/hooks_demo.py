@@ -1,4 +1,4 @@
-"""四钩子接入示例：session_start / pre_prompt / post_turn / session_end。
+﻿"""四钩子接入示例：session_start / pre_prompt / post_turn / session_end。
 
 跑法（不需要网络、不需要模型）：
 
@@ -6,7 +6,7 @@
 
 这个示例演示的是 **宿主自己拥有对话循环** 的接入形态：
 宿主每轮按四个钩子调 Alaya，而不是把整个循环交给 Harness。
-钩子契约见 docs/_wip/A3-产品形态与接入.md §3.1。
+钩子契约见 docs/17-接入形态与接口方案.md §3。
 """
 
 from __future__ import annotations
@@ -203,3 +203,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+

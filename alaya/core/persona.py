@@ -1,11 +1,11 @@
-"""人格层编译：在预算内保住"她是同一个人"。
+﻿"""人格层编译：在预算内保住"她是同一个人"。
 
 取舍规则（硬约束）：
 1. protected 条目必保——identity / 说话铁律这类东西丢了，人格就断了
 2. 按 section 优先级再按 priority 逐条纳入
 3. 装不下的**整条丢掉**，绝不切半句——半句比没有更糟，它会产生语义残片
 
-这条规则来自 lingchat-anima 的 `fit_persona_to_budget`：
+这条规则来自一个长期陪伴项目的预算裁剪实现：
 预算 7600 字符，identity + speech 整节必保、输出铁律整块必保、其余按整条择优。
 """
 
@@ -167,3 +167,4 @@ def extract_directives(text: str) -> list[str]:
         if any(k in s for k in ("以后", "不许", "必须", "永远", "原则", "规矩", "铁律")):
             out.append(s)
     return out[:3]
+

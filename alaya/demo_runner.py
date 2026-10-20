@@ -1,4 +1,4 @@
-"""三个月对话演示：看记忆库怎么演化。
+﻿"""三个月对话演示：看记忆库怎么演化。
 
 不依赖模型：用脚本化抽取结果，保证每次跑结果一致、可复现。
 """
@@ -16,13 +16,13 @@ DAY = 86400.0
 
 # (第几天, 说话人, 内容, 抽取结果)
 SCRIPT = [
-    (0, "user", "我叫晓星，在哈尔滨上学。", {
-        "entities": [{"name": "晓星", "type": "person"}, {"name": "哈尔滨", "type": "place"}],
+    (0, "user", "我叫阿禾，在杭州上学。", {
+        "entities": [{"name": "阿禾", "type": "person"}, {"name": "杭州", "type": "place"}],
         "facts": [
-            {"subject": "我", "predicate": "叫", "object": "晓星", "polarity": 1, "confidence": 0.95},
-            {"subject": "我", "predicate": "住在", "object": "哈尔滨", "polarity": 1, "confidence": 0.9},
+            {"subject": "我", "predicate": "叫", "object": "阿禾", "polarity": 1, "confidence": 0.95},
+            {"subject": "我", "predicate": "住在", "object": "杭州", "polarity": 1, "confidence": 0.9},
         ],
-        "state_changes": [{"scope": "我", "slot": "city", "value": "哈尔滨"}],
+        "state_changes": [{"scope": "我", "slot": "city", "value": "杭州"}],
         "theme": "初次见面",
     }),
     (1, "user", "我在一家小公司做后端，主要是写接口。", {
@@ -177,3 +177,5 @@ class _FakeLLM:
 
     def available(self):
         return True
+
+

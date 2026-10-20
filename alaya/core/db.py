@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 import sqlite3
 import threading
 import time
@@ -122,7 +123,21 @@ def _ensure_job_table(conn: sqlite3.Connection) -> None:
             log.warning("job table init failed: %s", e)
 
 
-def init_db(db_path: str) -> None:
+def init_db(db_path: str, *, migrate: str = "auto") -> dict:
+    """初始化/迁移数据库。
+
+    `migrate`（P1-3）：
+      - `auto`（默认）：需要时单事务迁移；迁移前先 checkpoint 再复制带时间戳的 `.bak`；
+      - `never`：版本不匹配直接抛 `MigrationRequiredError`，不写库；
+      - `dry_run`：不迁移，返回迁移计划（同 `migration_plan()`）。
+    版本高于程序支持时**一律拒绝**（`SchemaVersionError`），不静默跳过。
+    """
+    mode = str(migrate or "auto").strip().lower()
+    if mode not in ("auto", "never", "dry_run"):
+        raise ValueError("migrate 只能是 auto / never / dry_run")
+    if mode == "dry_run":
+        return migration_plan(db_path)
+
     with _init_lock:
         conn = connect(db_path)
         # 这两条是库级设置，只在初始化时设一次
@@ -130,12 +145,27 @@ def init_db(db_path: str) -> None:
         conn.execute("PRAGMA synchronous=NORMAL")
 
         version = conn.execute("PRAGMA user_version").fetchone()[0]
+        from_version = int(version)
+        migrated = False
+        backup_path: str | None = None
+
+        if version > SCHEMA_VERSION:
+            raise SchemaVersionError(db_path, version)
+
         if version == 0:
+            if mode == "never":
+                raise MigrationRequiredError(db_path, 0)
             conn.executescript(_read_schema())
             conn.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
             version = SCHEMA_VERSION
-        if version < SCHEMA_VERSION:
+            migrated = True
+        elif version < SCHEMA_VERSION:
+            if mode == "never":
+                raise MigrationRequiredError(db_path, version)
+            backup_path = _backup_before_migration(conn, db_path)
             _migrate(conn, version)
+            migrated = True
+
         _ensure_perf_indexes(conn)
         _ensure_job_table(conn)
 
@@ -148,6 +178,131 @@ def init_db(db_path: str) -> None:
                 conn.execute("UPDATE meta SET value=? WHERE key='schema_version'", (str(SCHEMA_VERSION),))
             except sqlite3.Error as e:
                 log.warning("meta schema_version update failed: %s", e)
+
+        return {
+            "db_path": os.path.abspath(str(db_path)),
+            "from_version": from_version,
+            "to_version": int(conn.execute("PRAGMA user_version").fetchone()[0]),
+            "migrated": migrated,
+            "backup": backup_path,
+        }
+
+
+# ── 迁移守卫 / 备份 / dry-run（P1-3）──────────────────────────
+class SchemaVersionError(RuntimeError):
+    """数据库 schema 版本高于当前程序支持：拒绝打开（降级安装 / 打开新库）。"""
+
+    def __init__(self, db_path: str, version: int, supported: int = SCHEMA_VERSION):
+        self.db_path = str(db_path)
+        self.version = int(version)
+        self.supported = int(supported)
+        super().__init__(
+            f"数据库 schema 版本 v{version} 高于当前程序支持的 v{supported}，拒绝打开：{self.db_path}。"
+            f"请升级 alaya，或从迁移前的 .bak 备份恢复。"
+        )
+
+
+class MigrationRequiredError(RuntimeError):
+    """`migrate="never"` 且库版本不匹配：报错但不迁移。"""
+
+    def __init__(self, db_path: str, version: int, supported: int = SCHEMA_VERSION):
+        self.db_path = str(db_path)
+        self.version = int(version)
+        self.supported = int(supported)
+        super().__init__(
+            f"数据库 schema 版本 v{version} 与程序支持的 v{supported} 不匹配；"
+            f"migrate='never' 已拒绝迁移：{self.db_path}"
+        )
+
+
+class BackupError(RuntimeError):
+    """迁移前备份失败：不允许在无备份的情况下迁移。"""
+
+
+def _backup_name(db_path: str, now: float | None = None) -> Path:
+    """同目录 `<db>.<YYYYmmdd-HHMMSS>.bak`；重名时加序号。"""
+    base = Path(db_path)
+    ts = time.strftime("%Y%m%d-%H%M%S", time.localtime(time.time() if now is None else now))
+    candidate = base.with_name(f"{base.name}.{ts}.bak")
+    i = 1
+    while candidate.exists():
+        candidate = base.with_name(f"{base.name}.{ts}-{i}.bak")
+        i += 1
+    return candidate
+
+
+def _backup_before_migration(conn: sqlite3.Connection, db_path: str, now: float | None = None) -> str | None:
+    """迁移前备份：先 WAL checkpoint（TRUNCATE），再复制主库文件。
+
+    复制失败时抛 `BackupError`——**没有备份就不许迁移**（P1-3）。
+    """
+    path = os.path.abspath(str(db_path))
+    if not os.path.exists(path):
+        return None
+    try:
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    except sqlite3.Error as e:  # 被其它连接占着也能继续（退化为非 TRUNCATE 检查点）
+        log.warning("checkpoint before backup failed: %s", e)
+    dest = _backup_name(path, now)
+    try:
+        shutil.copy2(path, dest)
+        log.warning("schema migration backup: %s", dest)
+        return str(dest)
+    except OSError as e:
+        raise BackupError(f"迁移前备份失败（{path} -> {dest}）：{type(e).__name__}: {e}") from e
+
+
+def current_version(db_path: str) -> int:
+    """读 user_version；库不存在返回 0（不创建文件）。"""
+    path = os.path.abspath(str(db_path))
+    if not os.path.exists(path):
+        return 0
+    try:
+        conn = sqlite3.connect(f"file:{path.replace(os.sep, '/')}?mode=ro", uri=True, timeout=5.0)
+        try:
+            return int(conn.execute("PRAGMA user_version").fetchone()[0])
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        # WAL 只读打开失败时退回普通只读连接（不执行任何写语句）
+        conn = sqlite3.connect(path, timeout=5.0)
+        try:
+            return int(conn.execute("PRAGMA user_version").fetchone()[0])
+        finally:
+            conn.close()
+
+
+def migration_plan(db_path: str) -> dict:
+    """dry-run：只报告将要做什么，不创建/不迁移/不备份。"""
+    path = os.path.abspath(str(db_path))
+    exists = os.path.exists(path)
+    cur = current_version(path) if exists else 0
+    if cur > SCHEMA_VERSION:
+        raise SchemaVersionError(path, cur)
+    needs = cur < SCHEMA_VERSION
+    actions: list[str] = []
+    backup_path: str | None = None
+    if not exists or cur == 0:
+        actions.append(f"create schema v{SCHEMA_VERSION}（新库）")
+    elif needs:
+        backup_path = str(_backup_name(path))
+        actions.append(f"backup: {path} -> {backup_path}")
+        for step in range(cur, SCHEMA_VERSION):
+            actions.append(f"migrate v{step} -> v{step + 1}（单事务）")
+    else:
+        actions.append("schema 已是当前版本，无需迁移")
+    return {
+        "ok": True,
+        "dry_run": True,
+        "db_path": path,
+        "exists": exists,
+        "current_version": cur,
+        "target_version": SCHEMA_VERSION,
+        "needs_migration": bool(needs),
+        "will_backup": backup_path is not None,
+        "backup_path": backup_path,
+        "actions": actions,
+    }
 
 
 def _migrate(conn: sqlite3.Connection, from_version: int) -> None:

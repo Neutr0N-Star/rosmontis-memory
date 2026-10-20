@@ -16,3 +16,4 @@ bench/_profile/
 dist/
 build/
 *.egg-info/
+docs/_wip/

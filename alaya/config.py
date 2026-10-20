@@ -1,4 +1,13 @@
-"""配置：环境变量优先，缺省值可直接跑。"""
+"""配置：环境变量优先，缺省值可直接跑。
+
+路径统一由 `ALAYA_HOME`（默认 `~/.alaya`）派生（P1-1）：
+- 数据库：`$ALAYA_HOME/alaya.db`（`ALAYA_DB` 可覆盖）
+- 模型：  `$ALAYA_HOME/models`（`ALAYA_MODEL_DIR` 可覆盖，与 alaya.models 一致）
+- token： `$ALAYA_HOME/token`（`ALAYA_TOKEN_FILE` 可覆盖）
+- .env：  `$ALAYA_HOME/.env`；开发态兼容仓库根 `.env`（`ALAYA_ENV_FILE` 可显式指定）
+
+pip 安装后 site-packages 不是配置目录，所以不再按包布局找 `.env` 作为主路径。
+"""
 
 from __future__ import annotations
 
@@ -6,19 +15,40 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+_PACKAGE_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _home_dir() -> Path:
+    raw = (os.environ.get("ALAYA_HOME") or "").strip()
+    return Path(raw).expanduser() if raw else Path.home() / ".alaya"
+
+
+def _env_files() -> list[Path]:
+    """配置加载顺序：显式 ALAYA_ENV_FILE > $ALAYA_HOME/.env > 仓库根 .env（开发态）。"""
+    explicit = (os.environ.get("ALAYA_ENV_FILE") or "").strip()
+    if explicit:
+        return [Path(explicit).expanduser()]
+    out: list[Path] = []
+    for p in (_home_dir() / ".env", _PACKAGE_ROOT / ".env"):
+        if p.exists() and p not in out:
+            out.append(p)
+    return out
+
 
 def _load_dotenv() -> None:
     # 让 .env 里的配置在启动时生效，不用每次手动 export。
     # 只 setdefault：进程里已经设的环境变量优先。
-    p = Path(__file__).resolve().parents[1] / ".env"
-    if not p.exists():
-        return
-    for line in p.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
+    for p in _env_files():
+        try:
+            lines = p.read_text(encoding="utf-8").splitlines()
+        except OSError:
             continue
-        k, v = line.split("=", 1)
-        os.environ.setdefault(k.strip(), v.strip())
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            os.environ.setdefault(k.strip(), v.strip())
 
 
 _load_dotenv()
@@ -144,8 +174,8 @@ class BudgetPlan:
 
 @dataclass
 class Config:
-    # 存储
-    db_path: str = field(default_factory=lambda: _env("ALAYA_DB", "alaya.db"))
+    # 存储：默认落在 ALAYA_HOME（默认 ~/.alaya），不再依赖当前工作目录
+    db_path: str = field(default_factory=lambda: _env("ALAYA_DB", str(_home_dir() / "alaya.db")))
 
     # Embedding
     embed_provider: str = field(default_factory=lambda: _env("ALAYA_EMBED", "ollama"))
@@ -205,6 +235,34 @@ class Config:
         # embed_model_id 缺省回落到模型名（模型安装器线可显式覆盖）
         if not (self.embed_model_id or "").strip():
             self.embed_model_id = self.embed_model
+
+    # ── ALAYA_HOME 派生路径（P1-1；app.py / cli.py / models.py 都从这里取）──
+    @staticmethod
+    def home_dir() -> Path:
+        """运行时家目录：`ALAYA_HOME`，默认 `~/.alaya`（不自动创建）。"""
+        return _home_dir()
+
+    @staticmethod
+    def env_file() -> Path:
+        """配置目录里的 `.env`：显式 ALAYA_ENV_FILE，否则 `<home>/.env`（不创建文件）。
+
+        加载顺序（`_load_dotenv`）在 home/.env 不存在时会回落到仓库根 `.env`
+        （开发态兼容）；`env_file()` 本身返回新部署应写入的位置。
+        """
+        explicit = (os.environ.get("ALAYA_ENV_FILE") or "").strip()
+        return Path(explicit).expanduser() if explicit else _home_dir() / ".env"
+
+    @staticmethod
+    def models_dir() -> Path:
+        """模型资产目录：`ALAYA_MODEL_DIR`，默认 `<home>/models`（与 alaya.models 一致）。"""
+        raw = (os.environ.get("ALAYA_MODEL_DIR") or "").strip()
+        return Path(raw).expanduser() if raw else _home_dir() / "models"
+
+    @staticmethod
+    def token_file() -> Path:
+        """服务鉴权 token 文件：`ALAYA_TOKEN_FILE`，默认 `<home>/token`。"""
+        raw = (os.environ.get("ALAYA_TOKEN_FILE") or "").strip()
+        return Path(raw).expanduser() if raw else _home_dir() / "token"
 
     def as_dict(self) -> dict:
         d = {k: v for k, v in self.__dict__.items() if k not in ("weights", "budget", "policy", "openai_key")}

@@ -79,12 +79,8 @@ def main() -> int:
         print(BANNER)
         from alaya.cli import main as cli_main
 
-        port = 8770
-        if "--port" in argv:
-            i = argv.index("--port")
-            if i + 1 < len(argv):
-                port = int(argv[i + 1])
-        return cli_main(["serve", "--port", str(port)])
+        # 参数原样透传：--host / --port / --token 都归 CLI 处理
+        return cli_main(argv)
 
     from alaya.cli import main as cli_main
 

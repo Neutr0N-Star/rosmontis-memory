@@ -2,8 +2,14 @@
 
 长期陪伴 AI 的**记忆后端**。给你自己的前端 / agent 提供「记得住、会遗忘、会成长」的记忆能力。
 
+> **English**: Alaya is a local-first memory backend for long-lived companion AI. It keeps a layered,
+> time-aware model of a person (episodes → entities → facts → current state), injects memory into
+> prompts under a hard token budget, and consolidates what matters on a schedule. Ship it as a Python
+> library or a loopback HTTP service; bring your own frontend and model.
+
 > **边界**：本仓库只有记忆引擎与接口，**不含前端**。任何 UI（Web / 桌面 / 移动）都用 HTTP 接口接进来。
 > 接口方案见 [docs/17-接入形态与接口方案.md](docs/17-接入形态与接口方案.md)。
+> **隐私**：存的是你的私密对话。默认只绑本机、首次启动生成本地 token；详见 [PRIVACY.md](PRIVACY.md) 与 [SECURITY.md](SECURITY.md)。
 
 ```
 pip install -e .                 # 只装核心（Python 标准库即可跑）
@@ -60,11 +66,14 @@ h.close()
 
 ```bash
 alaya serve --port 8770
-# 打开 http://127.0.0.1:8770/docs 看 OpenAPI 文档
+# 首次启动会打印本地访问 token，并写入 ~/.alaya/token。
+# 接口文档：http://127.0.0.1:8770/docs
 ```
 
 ```bash
+TOKEN=$(cat ~/.alaya/token)   # Windows: type %USERPROFILE%\.alaya\token
 curl -X POST http://127.0.0.1:8770/v1/turn \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"session_id":"u1","text":"我今天有点累"}'
 ```
@@ -74,16 +83,20 @@ curl -X POST http://127.0.0.1:8770/v1/turn \
 ```js
 const r = await fetch("http://127.0.0.1:8770/v1/turn/stream", {
   method: "POST",
-  headers: { "Content-Type": "application/json" },
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,   // 本地 token
+  },
   body: JSON.stringify({ session_id: "u1", text: "我今天有点累" }),
 });
 const reader = r.body.getReader();      // 逐块解析 "event: delta\ndata: {...}\n\n"
 ```
 
-Docker 一条命令：
+Docker 一条命令（容器内绑定 `0.0.0.0`，入口会自动生成 token 并打印在日志里）：
 
 ```bash
 docker compose up --build      # 只绑 127.0.0.1:8770，数据在 ./data
+docker compose logs alaya | grep token   # 取首次生成的 token
 ```
 
 前端只需要三类调用：**说话**（`/v1/turn` 或 `/v1/turn/stream` 流式）、**看**（`/v1/state`、`/v1/episodes`）、**打烊**（`/v1/session/sleep`）。
@@ -134,7 +147,7 @@ alaya serve --port 8770      # 本地服务（默认只绑 127.0.0.1）
 alaya daemon                 # 后台守护：自动整理/做梦/结算/遗忘（--once 只跑一拍）
 alaya backup                 # 备份（先 WAL checkpoint 再拷，运行中也安全）
 python run.py demo --reset   # 三个月对话演示（不需要模型）
-python -m unittest discover -s tests -p "test_*.py"   # 全部测试（124 项）
+python -m unittest discover -s tests -p "test_*.py"   # 全部测试（184 项）
 python bench/run_eval.py     # 质量基准（200 段合成对话 / 135 题）
 python bench/pareto.py       # 配置网格 → 帕累托前沿 → bench/report.md
 ```
@@ -159,10 +172,12 @@ python bench/pareto.py       # 配置网格 → 帕累托前沿 → bench/report
 
 - 接入：[quickstart（库）](docs/guides/quickstart-library.md) ｜ [API 参考](docs/guides/api-reference.md) ｜ [运维手册](docs/guides/operations.md) ｜ [接入形态方案](docs/17-接入形态与接口方案.md)
 - 设计：[整合方案](docs/14-主被动记忆原生整合方案.md) ｜ [模块契约](docs/15-交付蓝图与模块契约.md) ｜ [优化清单](docs/16-优化清单.md)
-- 历史（评审/迭代记录，非当前契约）：`docs/00-13`
+- 历史（评审与迭代记录，非当前契约）：`docs/01`–`docs/13`
 
 ---
 
 ## 许可
 
 MIT，见 [LICENSE](LICENSE)。
+
+

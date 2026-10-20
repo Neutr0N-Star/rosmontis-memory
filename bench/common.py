@@ -1,4 +1,4 @@
-"""评测公共设施：数据集加载、可插拔后端、临时库构建、配置注入、指标计算。
+﻿"""评测公共设施：数据集加载、可插拔后端、临时库构建、配置注入、指标计算。
 
 设计要点
 - **只读核心**：本模块只 import / 调用 ``alaya/``，不写其中任何文件。
@@ -32,7 +32,7 @@ ROOT = BENCH_DIR.parent
 DATASET_DIR = BENCH_DIR / "dataset"
 RESULTS_DIR = BENCH_DIR / "results"
 REPORT_PATH = BENCH_DIR / "report.md"
-A8_PATH = ROOT / "docs" / "_wip" / "A8-评测报告.md"
+SUMMARY_PATH = ROOT / "bench" / "eval-summary.md"
 
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -959,3 +959,5 @@ def quality_composite(metrics: dict) -> float:
             1.0 - metrics["answerable"]["miss_rate"],
         ]
     )
+
+

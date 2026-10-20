@@ -1,7 +1,7 @@
-# Alaya API 参考
+﻿# Alaya API 参考
 
-版本：包 `1.0.0`、公共 API `1`（`alaya/__init__.py:10-11`、`alaya/api.py:55`）、schema v3（`alaya/core/db.py:32`、`alaya/schema.sql:1-4`）。
-本文以当前工作树代码为准，行号对应当前版本。服务形态（HTTP）见 §6；运维流程见 [operations.md](operations.md)。
+版本：包 `1.1.0`、公共 API `1`（`alaya/__init__.py:10-11`、`alaya/api.py:55`）、schema v4（`alaya/core/db.py` 的 `SCHEMA_VERSION`）。
+本文以当前工作树代码为准。服务形态（HTTP）见 §6；运维流程见 [operations.md](operations.md)。
 
 ## 0. 三层入口
 
@@ -145,12 +145,12 @@ alaya.open(db_path: str | Config, config: dict | None = None) -> Handle
 
 ### 3.5 `alaya_skip`
 - episode：走 `pipeline.transition('skip')`，`state=muted`，同时写入长冷却；不删除（`alaya/tools.py:423-444`、`alaya/core/gate.py:254-255`）。
-- fact：没有 episode 状态机，直接 `status='invalidated', t_invalid=now`；v3 库有 `fact.archived` 列时同时置 `archived=1`，`t_valid_to` 保持 NULL（`alaya/tools.py:447-491`）。
+- fact：没有 episode 状态机，直接 `status='invalidated', t_invalid=now`；schema ≥ v3 的库有 `fact.archived` 列时同时置 `archived=1`，`t_valid_to` 保持 NULL（`alaya/tools.py:447-491`）。
 - `item_state(fact)` 会把这种状态显示为 `muted`（`alaya/tools.py:256-274`）。
 
 ## 4. 四钩子
 
-宿主自己拥有对话循环时，按四个事件调用 Handle（契约见 `docs/_wip/A3-产品形态与接入.md` §3.1、`docs/_wip/A7-接口实现报告.md` §3）：
+宿主自己拥有对话循环时，按四个事件调用 Handle（契约见 `docs/17-接入形态与接口方案.md` §3）：
 
 | 钩子 | 调用 | 返回 | 纪律 |
 |---|---|---|---|
@@ -390,3 +390,8 @@ h = open(cfg)
 
 > 调参前先确认字段有消费方；上表标「当前无消费方」的字段改动不会影响运行行为。
 > 配置修改后需要重建 `Memory`/`Harness`（HTTP 的 `/v1/settings` 会自动重建，`app.py:95-112`）。
+
+
+
+
+

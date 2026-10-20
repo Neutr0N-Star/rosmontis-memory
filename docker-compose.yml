@@ -7,7 +7,10 @@ services:
     volumes:
       - ./data:/data
     environment:
-      ALAYA_DB: /data/alaya.db
+      ALAYA_HOME: /data
+      # 访问 token：留空则首次启动自动生成并打印在日志里；
+      # 也可在 shell 里 export ALAYA_TOKEN=... 显式指定。
+      ALAYA_TOKEN: ${ALAYA_TOKEN:-}
       # 离线降级示例；接自己的模型时改成：
       # ALAYA_EMBED: ollama
       # ALAYA_LLM_HOT: openai

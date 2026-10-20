@@ -7,6 +7,7 @@ python -m alaya.cli <命令>
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import os
 import signal
@@ -28,14 +29,62 @@ def _fmt_ts(ts: float | None) -> str:
     return time.strftime("%Y-%m-%d %H:%M", time.localtime(ts))
 
 
+def is_loopback_host(host: str) -> bool:
+    """127.0.0.1 / ::1 / localhost / 其它回环地址。"""
+    h = (host or "").strip().strip("[]").lower()
+    if h in ("localhost", "::1", "0:0:0:0:0:0:0:1"):
+        return True
+    try:
+        return ipaddress.ip_address(h).is_loopback
+    except ValueError:
+        return False
+
+
+def bind_security_error(host: str, explicit_token: str | None) -> str | None:
+    """非回环地址必须显式给 token，否则拒绝启动（P0-4）。返回错误文案或 None。"""
+    if is_loopback_host(host):
+        return None
+    if (explicit_token or "").strip():
+        return None
+    return (
+        f"拒绝启动：--host {host} 不是回环地址，且未提供 --token 或 ALAYA_TOKEN。\n"
+        "本机使用请加 --host 127.0.0.1；确实要对外监听请显式给 token：\n"
+        "  alaya serve --host 0.0.0.0 --token <你的token>   # 或设置 ALAYA_TOKEN"
+    )
+
+
 def cmd_serve(args) -> int:
+    explicit_token = (getattr(args, "token", None) or os.environ.get("ALAYA_TOKEN") or "").strip()
+    bind_error = bind_security_error(getattr(args, "host", "127.0.0.1"), explicit_token)
+    if bind_error:
+        print(bind_error, file=sys.stderr)
+        return 2
     try:
         import uvicorn
     except ImportError:
         print("缺少 uvicorn。装一下：pip install uvicorn fastapi")
         return 1
-    print(f"藏识 Alaya 启动中 → http://{args.host}:{args.port}")
-    print(f"接口文档 → http://{args.host}:{args.port}/docs")
+    try:
+        from .service.app import ensure_local_token, token_path
+    except ImportError as e:  # 服务依赖缺失时给明确提示，不抛栈
+        print(f"缺少服务依赖（需要 fastapi）：{e}")
+        return 1
+
+    if explicit_token:
+        token = explicit_token
+        os.environ["ALAYA_TOKEN"] = token
+        print("认证：使用显式 token（--token / ALAYA_TOKEN，值不打印）", flush=True)
+    else:
+        try:
+            token = ensure_local_token()
+        except Exception as e:
+            print(f"生成本地 token 失败：{type(e).__name__}: {e}", file=sys.stderr)
+            return 2
+        os.environ["ALAYA_TOKEN"] = token
+        print(f"本地访问 token（首次生成，已写入 {token_path()}）：{token}", flush=True)
+
+    print(f"藏识 Alaya 启动中 → http://{args.host}:{args.port}", flush=True)
+    print(f"接口文档 → http://{args.host}:{args.port}/docs", flush=True)
     uvicorn.run("alaya.service.app:app", host=args.host, port=args.port, reload=args.reload, log_level="info")
     return 0
 
@@ -517,6 +566,10 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--host", default="127.0.0.1")
     s.add_argument("--port", type=int, default=8770)
     s.add_argument("--reload", action="store_true")
+    s.add_argument(
+        "--token", default=None,
+        help="显式访问 token（非回环 --host 必须给；也可用 ALAYA_TOKEN）",
+    )
     s.set_defaults(func=cmd_serve)
 
     s = sub.add_parser(

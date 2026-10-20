@@ -475,7 +475,7 @@ class TestServiceShutdown(unittest.TestCase):
         last = None
         while time.time() < deadline:
             try:
-                urllib.request.urlopen(base + "/health", timeout=0.5).read()
+                urllib.request.urlopen(base + "/healthz", timeout=0.5).read()
                 return
             except Exception as e:
                 last = e
@@ -497,6 +497,7 @@ class TestServiceShutdown(unittest.TestCase):
             "ALAYA_LLM_DEEP": "rule",
             "ALAYA_LOG": "INFO",
             "ALAYA_SHUTDOWN_MARKER": marker,
+            "ALAYA_TOKEN": "test-token",
             "PYTHONPATH": str(ROOT),
             "PYTHONIOENCODING": "utf-8",
         })
@@ -513,7 +514,8 @@ class TestServiceShutdown(unittest.TestCase):
             self._wait_health(base)
             # 建 harness（wake 会触发 get_harness），让 lifespan join 有对象可收
             req = urllib.request.Request(
-                base + "/v1/session/wake?session_id=probe", data=b"", method="POST"
+                base + "/v1/session/wake?session_id=probe", data=b"", method="POST",
+                headers={"Authorization": "Bearer test-token"},
             )
             urllib.request.urlopen(req, timeout=5).read()
 

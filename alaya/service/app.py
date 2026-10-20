@@ -9,20 +9,21 @@ from __future__ import annotations
 import json
 import logging
 import os
+import secrets
 import threading
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from .. import __version__ as _ALAYA_VERSION
 from ..config import Config
 from ..core import jobs
 from ..core.memory import Memory
@@ -31,10 +32,104 @@ from ..tools import transition_item
 
 log = logging.getLogger("alaya.service")
 
-WEB_DIR = Path(__file__).resolve().parents[2] / "web"
-
 _mem: Memory | None = None
 _harness = None
+
+# ── 本地 token 鉴权（P0-4）────────────────────────────────────
+# 路径先按 ALAYA_HOME / ~/.alaya 计算；等 D1 的 Config.home_dir() 落地后替换这里。
+TOKEN_FILENAME = "token"
+SECURITY_EXEMPT_PATHS = frozenset({"/healthz", "/readyz", "/openapi.json", "/docs", "/redoc"})
+_CONFIRM_VALUES = frozenset({"yes", "1", "true", "y"})
+
+
+def alaya_home_dir() -> Path:
+    """本地数据目录：显式 ALAYA_HOME 优先，否则 ~/.alaya。"""
+    raw = (os.environ.get("ALAYA_HOME") or "").strip()
+    if raw:
+        return Path(raw).expanduser()
+    return Path.home() / ".alaya"
+
+
+def token_path() -> Path:
+    return alaya_home_dir() / TOKEN_FILENAME
+
+
+def _chmod_private(path: Path) -> None:
+    try:
+        os.chmod(path, 0o600)  # Windows 上可能不生效；本地默认权限可接受
+    except OSError:
+        pass
+
+
+def ensure_local_token(path: Path | None = None) -> str:
+    """读取本地 token；不存在则生成 secrets.token_urlsafe(32) 并写入。"""
+    p = Path(path) if path is not None else token_path()
+    try:
+        if p.exists():
+            token = p.read_text(encoding="utf-8").strip()
+            if token:
+                _chmod_private(p)
+                return token
+    except OSError:
+        pass
+    p.parent.mkdir(parents=True, exist_ok=True)
+    token = secrets.token_urlsafe(32)
+    try:
+        fd = os.open(str(p), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        try:
+            existing = p.read_text(encoding="utf-8").strip()
+        except OSError:
+            existing = ""
+        if existing:
+            _chmod_private(p)
+            return existing
+        p.write_text(token + "\n", encoding="utf-8")
+    else:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(token + "\n")
+    _chmod_private(p)
+    return token
+
+
+def configured_token() -> str | None:
+    """显式 ALAYA_TOKEN 优先；否则读本地 token 文件（不存在返回 None）。"""
+    raw = (os.environ.get("ALAYA_TOKEN") or "").strip()
+    if raw:
+        return raw
+    try:
+        token = token_path().read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return token or None
+
+
+def _valid_bearer(header: str | None, token: str) -> bool:
+    if not header or not token:
+        return False
+    scheme, _sep, value = header.partition(" ")
+    return scheme.strip().lower() == "bearer" and secrets.compare_digest(value.strip(), token)
+
+
+def unauthorized_response(message: str = "缺少或无效的 Authorization: Bearer token") -> JSONResponse:
+    return JSONResponse(
+        {
+            "ok": False,
+            "data": None,
+            "error": {"code": "unauthorized", "retryable": False, "message": message},
+        },
+        status_code=401,
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+def is_confirmed(x_confirm: str | None, confirm: str | None) -> bool:
+    """危险操作确认：X-Confirm: yes 头，或 ?confirm=yes。"""
+    for value in (x_confirm, confirm):
+        if isinstance(value, str) and value.strip().lower() in _CONFIRM_VALUES:
+            return True
+    return False
+
 
 # HTTP /v1/settle 的后台 job 线程：lifespan 关停时要 join，不能硬杀。
 _job_threads: set[threading.Thread] = set()
@@ -341,12 +436,12 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title="藏识 Alaya",
-        version="1.0.0",
+        version=_ALAYA_VERSION,
         description="长期陪伴 AI 的记忆器官：五层记忆 + 三轴 + 预算约束检索",
         lifespan=_lifespan,
     )
-    # CORS：默认只放行本机常见前端端口与 file:// 打开（Origin: null）；
-    # 远程/自定义来源用 ALAYA_CORS_ORIGINS 显式配置（逗号分隔）。
+    # CORS：默认只放行本机常见前端端口；file:// 的 `Origin: null` 不再默认放行，
+    # 需要它的用户显式配置 ALAYA_CORS_ORIGINS=null（P0-4）。
     _cors_env = (os.environ.get("ALAYA_CORS_ORIGINS") or "").strip()
     if _cors_env:
         _cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
@@ -355,7 +450,6 @@ def create_app() -> FastAPI:
             "http://127.0.0.1:8770", "http://localhost:8770",
             "http://127.0.0.1:3000", "http://localhost:3000",
             "http://127.0.0.1:5173", "http://localhost:5173",
-            "null",  # 前端用 file:// 直接打开时的 Origin
         ]
     app.add_middleware(
         CORSMiddleware,
@@ -363,8 +457,23 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    if WEB_DIR.exists():
-        app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
+
+    @app.middleware("http")
+    async def _auth_middleware(request: Request, call_next):
+        """除 /healthz /readyz 外的全部 HTTP 面要求 Bearer token（P0-4）。
+
+        OPTIONS 预检放行（预检不带 Authorization；真正的请求照样要 token）。
+        """
+        if request.method == "OPTIONS" or request.url.path in SECURITY_EXEMPT_PATHS:
+            return await call_next(request)
+        try:
+            token = configured_token() or ensure_local_token()
+        except Exception as e:  # token 文件不可写等：明确 401，不裸奔
+            log.warning("token resolve failed: %s", e)
+            token = None
+        if not token or not _valid_bearer(request.headers.get("authorization"), token):
+            return unauthorized_response()
+        return await call_next(request)
 
     @app.exception_handler(RequestValidationError)
     async def _validation(request, exc):
@@ -783,7 +892,18 @@ def create_app() -> FastAPI:
         )
 
     @app.post("/v1/settings", tags=["设置"])
-    def post_settings(body: SettingsIn):
+    def post_settings(
+        body: SettingsIn,
+        x_confirm: str | None = Header(default=None, alias="X-Confirm"),
+        confirm: str | None = None,
+    ):
+        """改本地模型/API 配置（会写 .env）：危险操作，必须显式确认。"""
+        if not is_confirmed(x_confirm, confirm):
+            return fail(
+                "confirmation_required",
+                "危险操作需要 X-Confirm: yes 头或 ?confirm=yes",
+                403,
+            )
         patch = {}
         for env_key, val in (
             ("ALAYA_LLM_HOT", body.llm_hot),
@@ -839,8 +959,18 @@ def create_app() -> FastAPI:
             return fail("onboard_failed", str(e), 500)
 
     @app.post("/v1/wipe", tags=["维护"])
-    def post_wipe(session_id: str):
-        """删掉一个角色的全部数据。不可逆。"""
+    def post_wipe(
+        session_id: str,
+        x_confirm: str | None = Header(default=None, alias="X-Confirm"),
+        confirm: str | None = None,
+    ):
+        """删掉一个角色的全部数据（不可逆）：必须显式确认。"""
+        if not is_confirmed(x_confirm, confirm):
+            return fail(
+                "confirmation_required",
+                "危险操作需要 X-Confirm: yes 头或 ?confirm=yes",
+                403,
+            )
         sid = _no_wildcard(session_id)
         return ok(get_mem().wipe(sid))
 
@@ -950,19 +1080,10 @@ def create_app() -> FastAPI:
     def get_config():
         return ok(get_mem().cfg.as_dict())
 
-    # ── 前端 ──────────────────────────────────────────────
+    # ── 服务信息（前端不在产品内：web/ 挂载与 /debug 已移除）────
     @app.get("/", include_in_schema=False)
     def index():
-        for name in ("app.html", "index.html"):
-            f = WEB_DIR / name
-            if f.exists():
-                return FileResponse(str(f))
-        return JSONResponse({"ok": True, "data": "藏识 Alaya 服务运行中，web/ 下没有找到页面"})
-
-    @app.get("/debug", include_in_schema=False)
-    def debug_panel():
-        f = WEB_DIR / "index.html"
-        return FileResponse(str(f)) if f.exists() else JSONResponse({"ok": False}, status_code=404)
+        return JSONResponse({"ok": True, "data": {"service": "alaya", "docs": "/docs"}})
 
     @app.get("/health", include_in_schema=False)
     def health():
@@ -1006,7 +1127,7 @@ def create_app() -> FastAPI:
             }
         except Exception as e:
             checks["providers"] = {"ok": False, "error": type(e).__name__}
-        body = {"ok": ok, "data": {"version": "1.0.0", "checks": checks}}
+        body = {"ok": ok, "data": {"version": _ALAYA_VERSION, "checks": checks}}
         return JSONResponse(body, status_code=200 if ok else 503)
 
     return app

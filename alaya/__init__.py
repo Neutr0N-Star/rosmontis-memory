@@ -1,4 +1,4 @@
-"""藏识 Alaya — 长期陪伴 AI 的记忆器官。
+﻿"""藏识 Alaya — 长期陪伴 AI 的记忆器官。
 
 对外三层入口：
 - `alaya.open(db_path, config)` → `Handle`（稳定公共 API v1，见 alaya/api.py）
@@ -7,7 +7,7 @@
 服务形态见 alaya.service.app。
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 api_version = "1"
 
 __all__ = [
@@ -45,3 +45,4 @@ def __getattr__(name):
 
         return getattr(api, name)
     raise AttributeError(name)
+

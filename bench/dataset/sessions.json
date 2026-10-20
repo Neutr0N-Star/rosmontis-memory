@@ -26,7 +26,7 @@
         "subject": "我"
       },
       {
-        "object": "晓星",
+        "object": "阿禾",
         "polarity": 1,
         "predicate": "叫",
         "subject": "我"
@@ -129,7 +129,7 @@
     },
     "facts": {
       "city": [
-        "哈尔滨",
+        "杭州",
         "苏州",
         "天津"
       ],
@@ -167,14 +167,14 @@
       },
       "travel_place": "桂林"
     },
-    "hometown": "哈尔滨",
+    "hometown": "杭州",
     "role": "后端开发",
     "session_id": "s01",
     "timeline": {
       "city": [
         {
           "t": 1767610800.0,
-          "value": "哈尔滨"
+          "value": "杭州"
         },
         {
           "t": 1771239600.0,
@@ -206,7 +206,7 @@
         }
       ]
     },
-    "user_name": "晓星"
+    "user_name": "阿禾"
   },
   "s02": {
     "expected_active_facts": [

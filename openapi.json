@@ -3,7 +3,7 @@
   "info": {
     "title": "藏识 Alaya",
     "description": "长期陪伴 AI 的记忆器官：五层记忆 + 三轴 + 预算约束检索",
-    "version": "1.0.0"
+    "version": "1.1.0"
   },
   "paths": {
     "/v1/episodes": {
@@ -1376,16 +1376,51 @@
           "设置"
         ],
         "summary": "Post Settings",
+        "description": "改本地模型/API 配置（会写 .env）：危险操作，必须显式确认。",
         "operationId": "post_settings_v1_settings_post",
+        "parameters": [
+          {
+            "name": "confirm",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Confirm"
+            }
+          },
+          {
+            "name": "X-Confirm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Confirm"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/SettingsIn"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -1454,7 +1489,7 @@
           "维护"
         ],
         "summary": "Post Wipe",
-        "description": "删掉一个角色的全部数据。不可逆。",
+        "description": "删掉一个角色的全部数据（不可逆）：必须显式确认。",
         "operationId": "post_wipe_v1_wipe_post",
         "parameters": [
           {
@@ -1464,6 +1499,38 @@
             "schema": {
               "type": "string",
               "title": "Session Id"
+            }
+          },
+          {
+            "name": "confirm",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Confirm"
+            }
+          },
+          {
+            "name": "X-Confirm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Confirm"
             }
           }
         ],

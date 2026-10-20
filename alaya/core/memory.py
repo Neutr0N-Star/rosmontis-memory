@@ -1,4 +1,4 @@
-"""Memory：进程内库形态的门面。
+﻿"""Memory：进程内库形态的门面。
 
 服务层和 CLI 都通过它调用，保证两套入口行为完全一致。
 """
@@ -367,8 +367,8 @@ class Memory:
         self, scope: str, as_of: float | None = None, session_id: str | None = None
     ) -> dict:
         # session_id 必须过滤。state_slot 表本来就有这个字段，早期单会话时
-        # 漏了过滤条件——加了角色卡之后才暴露：A 角色说"我叫晓星"，
-        # B 角色说"我叫小深"，两边会互相覆盖。
+        # 漏了过滤条件——加了角色卡之后才暴露：A 角色说"我叫甲"，
+        # B 角色说"我叫乙"，两边会互相覆盖。
         as_of = as_of or time.time()
         with DB.reader(self.cfg.db_path) as conn:
             # entity 查询必须带 session：库里每个会话都有一条 norm_name=「我」，
@@ -1048,3 +1048,5 @@ def _idle_env_float(key: str, default: float) -> float:
         return float(raw) if raw not in (None, "") else float(default)
     except (TypeError, ValueError):
         return float(default)
+
+

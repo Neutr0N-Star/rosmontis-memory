@@ -1,4 +1,4 @@
-"""配置网格 → 帕累托前沿 → 生成 bench/report.md 与 docs/_wip/A8-评测报告.md。
+﻿"""配置网格 → 帕累托前沿 → 生成 bench/report.md 与 bench/eval-summary.md。
 
 用法
     PYTHONIOENCODING=utf-8 python bench/pareto.py
@@ -626,7 +626,7 @@ python bench/dataset/gen_dataset.py
 python bench/run_eval.py
 python bench/run_eval.py --field off --out bench/results/latest_field_off.json
 
-# 3) 帕累托网格 + 生成 bench/report.md 与 docs/_wip/A8-评测报告.md
+# 3) 帕累托网格 + 生成 bench/report.md 与 bench/eval-summary.md
 python bench/pareto.py
 
 # 4) 有本地 Ollama 时可测真实抽取（无则自动回退规则，不崩）
@@ -639,8 +639,8 @@ python bench/run_eval.py --backend llm --extraction-limit 50
 """
 
 
-def build_a8(ctx: dict) -> str:
-    """docs/_wip/A8-评测报告.md：给决策者看的压缩版（数字同样全部来自脚本）。"""
+def build_summary(ctx: dict) -> str:
+    """bench/eval-summary.md：给决策者看的压缩版（数字同样全部来自脚本）。"""
     ds = ctx["dataset"]
     mbn = ctx["metrics_by_name"]
     rec = ctx["recommendation"]
@@ -648,7 +648,7 @@ def build_a8(ctx: dict) -> str:
     base = mbn["baseline_uniform"]
     ref = mbn["product_default"]
     return f"""\
-# A8 · 评测报告（WS-D：质量基准 + 帕累托）
+# 质量基准与帕累托 · 评测摘要
 
 > 由 `bench/pareto.py` 自动生成；完整表格、口径与局限见 [bench/report.md](../bench/report.md)。
 > 本文件不手工填数——所有数字与同次运行的 `bench/results/pareto.json` 对齐。
@@ -716,7 +716,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--repeats", type=int, default=2, help="每题重复检索次数（延迟取均值，默认 2）")
     ap.add_argument("--max-questions", type=int, default=0, help="冒烟用：只跑前 N 题（0=全部，题目顺序按会话/类别）")
     ap.add_argument("--out", default=str(C.RESULTS_DIR / "pareto.json"), help="原始结果 JSON 输出路径")
-    ap.add_argument("--no-docs", action="store_true", help="只算不写 report/A8（调试用）")
+    ap.add_argument("--no-docs", action="store_true", help="只算不写报告（调试用）")
     ap.add_argument("--regen", action="store_true", help="重新生成数据集")
     return ap.parse_args(argv)
 
@@ -933,10 +933,10 @@ def main(argv: list[str] | None = None) -> int:
         report = build_report(ctx)
         with open(C.REPORT_PATH, "w", encoding="utf-8", newline="\n") as fh:
             fh.write(report)
-        a8 = build_a8(ctx)
-        C.A8_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with open(C.A8_PATH, "w", encoding="utf-8", newline="\n") as fh:
-            fh.write(a8)
+        summary = build_summary(ctx)
+        C.SUMMARY_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(C.SUMMARY_PATH, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(summary)
         mbn = ctx["metrics_by_name"]
         rec = ctx["recommendation"]
         print("-" * 72)
@@ -950,7 +950,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(f"θ_abstain 推荐：{ctx['theta_recommendation']['theta']:.2f}")
         print(f"报告：{C.REPORT_PATH}")
-        print(f"A8  ：{C.A8_PATH}")
+        print(f"摘要：{C.SUMMARY_PATH}")
         print(f"JSON：{Path(args.out).resolve()}")
     print(f"总耗时：{payload['elapsed_s']}s")
     return 0
@@ -958,3 +958,8 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+
+
+

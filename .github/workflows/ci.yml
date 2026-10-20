@@ -12,8 +12,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        python: ["3.10", "3.12"]
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.10", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -32,3 +32,28 @@ jobs:
         run: |
           python scripts/export_openapi.py
           git diff --exit-code openapi.json || (echo "openapi.json 过期：请本地跑 python scripts/export_openapi.py 并提交" && exit 1)
+
+  package:
+    name: build sdist + wheel, twine check
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build
+      - name: Check metadata
+        run: python -m twine check dist/*
+      - name: Wheel must contain schema.sql and py.typed
+        run: |
+          python -m zipfile -l dist/*.whl | grep -E "alaya/(schema\.sql|py\.typed)"
+      - name: Install wheel in clean venv and smoke
+        run: |
+          python -m venv /tmp/venv
+          /tmp/venv/bin/pip install dist/*.whl
+          /tmp/venv/bin/python -c "import alaya, tempfile, os; d=tempfile.mkdtemp(); h=alaya.open(os.path.join(d,'t.db')); h.wake('u','c'); h.observe('u','c','我搬到上海了','记住了'); print('ctx', h.context('u','c','我住哪',budget=200)['tokens']); h.close()"
+          /tmp/venv/bin/alaya --version

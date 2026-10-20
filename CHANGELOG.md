@@ -2,6 +2,36 @@
 
 本项目遵循语义化版本；`api_version`（对外接口版本）与包版本分开管理，破坏性接口改动才升。
 
+## [1.1.0] - 2026-10-20
+
+首个面向公开分发的版本：加了默认安全、模型资产与向量可靠性。
+
+### Added
+
+- **本地访问 token**：首次 `alaya serve` 生成并打印，写入 `~/.alaya/token`；除 `/healthz`、`/readyz`、`/docs`、`/openapi.json` 外，全部 HTTP 面要求 `Authorization: Bearer`。
+- **绑定安全**：`--host` 非回环时必须显式提供 `--token` / `ALAYA_TOKEN`，否则拒绝启动；容器镜像入口自动生成并打印 token。
+- **破坏性接口确认**：`/v1/wipe`、`/v1/settings` 需要 `X-Confirm: yes` 或 `?confirm=yes`。
+- **模型资产管理**：`alaya models list/install/where/verify/remove`；断点续传、3 次重试、SHA-256 校验、镜像可换、失败保留旧模型。模型不进 wheel。
+- **向量可靠性**：断路器（远端失败后不再发起请求、指数退避、恢复自动切回）、向量身份（schema v4 记录 `embed_model`/`embed_dim`，检索只比同身份）、`embed_backfill` 补齐降级期空向量。`/readyz` 输出 `vector_mode`、`embed_model`、`pending_backfill`、断路器状态。
+- **迁移守卫**：高于当前支持的库版本拒绝打开；迁移前自动备份；`alaya.open(..., migrate="auto"|"never"|"dry_run")`。
+- **`ALAYA_HOME`**：`~/.alaya` 统一承载 db、模型、token、`.env`；开发态仍兼容仓库根 `.env`。
+- 发布工程：`py.typed`、sdist + wheel 构建与 `twine check` 进入 CI、契约测试（版本号一致、公共面冻结、openapi 路由齐全）。
+
+### Changed
+
+- **无模型不再写脏记忆**：没有真实模型输出时不写 assistant 行，库层抛 `llm_unavailable`（`retryable=True`），HTTP 返回 503；流式发 `error` 事件后终止，不落半截回复。
+- CORS 默认不再放行 `Origin: null`；`file://` 场景需显式配置 `ALAYA_CORS_ORIGINS=null`。
+- 包元数据补 MIT 许可证分类、Beta 状态、Python 3.13；作者改为项目维护者。
+- 服务根路径 `/` 只返回服务信息 JSON，`/debug` 与静态页面入口移除。
+
+### Removed
+
+- 仓库内前端目录、内部施工稿、一次性对照脚本与演示二进制库；这些不再随发布物分发。
+
+### Security
+
+- 本版本起，把服务暴露到公网需要自行加反向代理与网关鉴权；默认配置只服务本机。
+
 ## [1.0.0] - 2026-10-19
 
 首个可交付版本：本地记忆后端（库 + HTTP + 守护进程），无前端。

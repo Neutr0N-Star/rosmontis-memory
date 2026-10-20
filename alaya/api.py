@@ -47,7 +47,8 @@ import uuid
 from typing import Any, Callable
 
 from .config import Config
-from .harness import Harness, build_context as harness_build_context
+from .core import db as DB
+from .harness import Harness, LLMUnavailableError, build_context as harness_build_context
 from .tools import dispatch, item_state, transition_item
 
 log = logging.getLogger("alaya.api")
@@ -203,6 +204,8 @@ class Handle:
             r = self._harness.turn(text, sid, history=history, extra_system=extra_system)
         except ValueError as e:
             raise AlayaError("invalid_argument", str(e)) from None
+        except LLMUnavailableError as e:
+            raise AlayaError("llm_unavailable", f"模型没给出回复：{e}", retryable=True) from None
         except RuntimeError as e:
             raise AlayaError("llm_unavailable", f"模型没给出回复：{e}", retryable=True) from None
         return {"ok": True, "space": space, "conversation": conversation, "session_id": sid, **r}
@@ -450,20 +453,31 @@ def _public_job(job: dict) -> dict:
     }
 
 
-def open(db_path: str, config: dict | None = None) -> Handle:
+def open(db_path: str, config: dict | None = None, *, migrate: str | None = None) -> Handle | dict:
     """打开一个记忆空间，返回 Handle。
 
     `config` 可覆盖 `Config` 的任意字段（如 embed_provider / llm_hot / budget_tokens），
     另接受 Handle 级选项：
 
-        llm_callable / llm   宿主模型回调
+        llm_callable / llm   宿主模型回调：`(messages, tools) -> dict`
+                             （dict 需含 content 或 tool_calls；未配置时 turn 抛
+                              `AlayaError("llm_unavailable", retryable=True)`）
         system_prompt        本体 system 提示
         auto_tick            是否每轮后台节拍（默认 False，交给调度器）
         memory_budget        每轮检索 token 预算
         max_tool_rounds      工具循环上限（默认 3）
         observe_window       observe 幂等窗口秒数（默认 300）
+        migrate              迁移策略，与关键字参数同义
 
-    例：`alaya.open("alaya.db", {"embed_provider": "hash", "llm_hot": "rule", "llm_callable": fake})`
+    `migrate`（P1-3）：
+      - `"auto"`（默认）：需要时单事务迁移；迁移前自动做带时间戳的 `.bak` 备份；
+      - `"never"`：版本不匹配直接抛 `AlayaError("migration_required")`，绝不改库；
+      - `"dry_run"`：不迁移、不打开 Handle，返回一份迁移计划 dict：
+        `{"ok","dry_run","db_path","exists","current_version","target_version",
+          "needs_migration","will_backup","backup_path","actions"}`。
+
+    例：`alaya.open("alaya.db", {"embed_provider": "hash", "llm_hot": "rule",
+                                  "llm_callable": fake})`
     """
     if isinstance(db_path, Config):
         cfg = db_path
@@ -481,6 +495,22 @@ def open(db_path: str, config: dict | None = None) -> Handle:
             cfg = Config(**cfg_kwargs)
         except Exception as e:
             raise AlayaError("invalid_argument", f"配置不合法：{type(e).__name__}: {e}") from None
+
+    # ── 迁移策略（P1-3）────────────────────────────────────
+    mode = (migrate if migrate is not None else opts.get("migrate", "auto"))
+    mode = str(mode or "auto").strip().lower()
+    if mode not in ("auto", "never", "dry_run"):
+        raise AlayaError("invalid_argument", "migrate 只能是 auto / never / dry_run")
+    try:
+        if mode == "dry_run":
+            return DB.migration_plan(cfg.db_path)
+        DB.init_db(cfg.db_path, migrate=mode)
+    except DB.SchemaVersionError as e:
+        raise AlayaError("schema_too_new", str(e), retryable=False) from None
+    except DB.MigrationRequiredError as e:
+        raise AlayaError("migration_required", str(e), retryable=False) from None
+    except DB.BackupError as e:
+        raise AlayaError("migration_backup_failed", str(e), retryable=False) from None
 
     handle_opts: dict = {k: opts.get(k) for k in _HANDLE_OPTIONS if k in opts}
     llm = handle_opts.pop("llm_callable", None) or handle_opts.pop("llm", None)

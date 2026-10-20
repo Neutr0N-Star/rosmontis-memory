@@ -174,12 +174,12 @@ rosmontis models where bge-small-zh-v1.5       # 打印 onnx / tokenizer / 目�
 rosmontis models verify bge-small-zh-v1.5      # 校验文件完整性
 ```
 
-> **通道现状（v2.0.0）**：`ollama` 与 `hash` 可用。
-> `local`（本地 ONNX 进程内推理）与 `openai`（兼容 `/v1/embeddings`）**尚未实现**——配置这两个值会在启动时直接抛 `embed_provider_unavailable`，不会静默降级。
-> `rosmontis models install` 下载的模型目前**没有推理侧消费者**，请勿仅凭它判断本地语义检索可用。
-> `/readyz` 报告 `vector_mode`（`semantic` / `degraded` / `misconfigured` / `none`）、模型名、维度与待回算条目数（`null_vectors` + `stale_identity`）。
-> `context()` 的返回体带 `vector_mode` / `degraded` / `degraded_reason` 三个字段，库形态使用者不必起 HTTP 也能发现降级。
-> `misconfigured` 表示「配置的维度与模型实际输出不一致」——此时写入不落向量、回算会被跳过，请核对 `ROSMONTIS_EMBED_DIM`，不要当成普通降级。
+> **通道现状（v2.1.0）**：三条语义通道 + 一条兜底，全部可用。
+> - `ollama`（默认）：本机 Ollama 的 embedding 模型（如 `bge-m3:latest`），断路器保护，半死不拖对话
+> - `local`：**进程内 ONNX 推理**，零外部服务。需要 `pip install "rosmontis-memory[embed]"` + `rosmontis models install bge-small-zh-v1.5`；维度自动从模型 `config.json` 读取
+> - `openai`：任意 OpenAI 兼容 `/v1/embeddings` 端点，配 `ROSMONTIS_EMBED_OPENAI_BASE` / `_KEY`（可复用 `ROSMONTIS_OPENAI_BASE` / `_KEY`）
+> - `hash`：确定性哈希兜底，非语义，需显式配置才生效
+> 三条语义通道失败时都显式降级（`degraded=True` + 原因），`/readyz` 报告 `vector_mode`（`semantic` / `degraded` / `misconfigured` / `none`）与待回算条目数；`context()` 返回体带同样三个降级字段。`misconfigured` 表示配置维度与模型实际输出不一致——此时写入不落向量、回算被跳过，请核对 `ROSMONTIS_EMBED_DIM`。
 
 ## 运行与运维
 

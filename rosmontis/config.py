@@ -11,9 +11,12 @@ pip 安装后 site-packages 不是配置目录，所以不再按包布局找 `.e
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+
+log = logging.getLogger("rosmontis.config")
 
 _PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 
@@ -188,6 +191,12 @@ class Config:
     embed_timeout: float = field(default_factory=lambda: _envf("ROSMONTIS_EMBED_TIMEOUT", 8.0))
     # >0 时按批调用，减少往返
     embed_batch: int = field(default_factory=lambda: _envi("ROSMONTIS_EMBED_BATCH", 8))
+    # local 通道：模型目录（models install 的下载根）；未显式设置 embed_dim 时维度自动取模型真值
+    embed_model_dir: str = field(default_factory=lambda: _env("ROSMONTIS_MODEL_DIR", ""))
+    # openai 兼容 embedding 通道：留空回落到上面的 OpenAI 通用配置
+    embed_openai_base: str = field(default_factory=lambda: _env("ROSMONTIS_EMBED_OPENAI_BASE", ""))
+    embed_openai_key: str = field(default_factory=lambda: _env("ROSMONTIS_EMBED_OPENAI_KEY", ""))
+    embed_openai_model: str = field(default_factory=lambda: _env("ROSMONTIS_EMBED_OPENAI_MODEL", ""))
 
     # LLM：hot=每条消息的抽取，deep=冲突消解/重要度等关键判断
     llm_hot: str = field(default_factory=lambda: _env("ROSMONTIS_LLM_HOT", "ollama"))
@@ -235,6 +244,21 @@ class Config:
         # embed_model_id 缺省回落到模型名（模型安装器线可显式覆盖）
         if not (self.embed_model_id or "").strip():
             self.embed_model_id = self.embed_model
+        # openai embedding 通道回落到通用 OpenAI 配置（key/base 可复用 LLM 通道）
+        if not (self.embed_openai_base or "").strip():
+            self.embed_openai_base = self.openai_base
+        if not (self.embed_openai_key or "").strip():
+            self.embed_openai_key = self.openai_key
+        if not (self.embed_openai_model or "").strip():
+            self.embed_openai_model = self.embed_model
+        # local 通道：未显式设置 embed_dim 时，维度取资产表的模型真值，
+        # 避免「默认 1024 vs 模型实际 384」这种一启动就 misconfigured 的坑。
+        if (self.embed_provider or "").strip().lower() == "local" and "ROSMONTIS_EMBED_DIM" not in os.environ:
+            try:
+                from . import models as _models
+                self.embed_dim = int(_models.resolve(self.embed_model, self.embed_model_dir or None)["dim"])
+            except Exception as e:   # 模型未安装等情况：让 Embedder 的启动校验去报错
+                log.debug("local 通道维度自动发现跳过：%s", e)
 
     # ── ROSMONTIS_HOME 派生路径（P1-1；app.py / cli.py / models.py 都从这里取）──
     @staticmethod

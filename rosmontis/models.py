@@ -150,6 +150,11 @@ def _download(url: str, dest: Path, *, retries: int = 3, timeout: float = 30.0, 
         try:
             have = part.stat().st_size if part.exists() else 0
             req = urllib.request.Request(url)
+            # hf-mirror 等镜像会屏蔽默认的 Python-urllib UA（403），带浏览器 UA 才放行
+            req.add_header(
+                "User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) rosmontis-models-installer",
+            )
             if have:
                 req.add_header("Range", f"bytes={have}-")
             with urllib.request.urlopen(req, timeout=timeout) as resp:

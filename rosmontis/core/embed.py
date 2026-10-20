@@ -32,9 +32,17 @@ log = logging.getLogger("rosmontis.embed")
 # 契约：对象需提供 embed(text) -> list[float] | None；可选 embed_many。
 provider_registry: dict[str, str] = {
     "ollama": "builtin-http",
+    "openai": "builtin-openai-compat",
+    "local": "builtin-onnx",
     "hash": "builtin-test-fallback",
     "none": "builtin-disabled",
 }
+
+# 语义通道：能产出真实语义向量的 provider。其余（hash）永远记为 degraded，
+# 写路径据此不落伪向量。openai/local 失败时同样走 degraded（见 embed()）。
+SEMANTIC_PROVIDERS = {"ollama", "openai", "local"}
+
+LOCAL_RETRY_SECS = 60.0     # local 推理失败后的重试间隔（避免每条都撞同一个坏模型）
 
 
 class EmbedProviderError(RosmontisError):
@@ -99,6 +107,9 @@ class Embedder:
         model_id: str | None = None,
         clock=None,
         probe_timeout: float = PROBE_TIMEOUT,
+        openai_base: str = "",
+        openai_key: str = "",
+        model_dir: str = "",
     ):
         prov = str(provider or "").strip().lower()
         if prov not in provider_registry:
@@ -120,6 +131,35 @@ class Embedder:
         # 配置维度与实际模型输出不一致（首次拿到远程向量时才能发现）。
         # 这类错误最容易被吞成"静默跳过所有向量"，所以要单独外露成 misconfigured。
         self.dim_mismatch: str | None = None
+
+        # ── openai 兼容通道的配置（缺 base/key 则启动即失败）──
+        self.openai_base = (openai_base or "").rstrip("/")
+        self.openai_key = openai_key or ""
+        if self.provider == "openai" and (not self.openai_base or not self.openai_key):
+            missing = "ROSMONTIS_EMBED_OPENAI_BASE" if not self.openai_base else "ROSMONTIS_EMBED_OPENAI_KEY"
+            raise RosmontisError(
+                "embed_provider_unavailable",
+                f"openai 通道需要 {missing}（也可复用 ROSMONTIS_OPENAI_BASE / ROSMONTIS_OPENAI_KEY）",
+                retryable=False,
+            )
+
+        # ── local ONNX 通道：构造时只定位文件，推理惰性加载 ──
+        self._local = None
+        if self.provider == "local":
+            from .. import models as _models
+            from .embed_local import LocalOnnxEmbedder
+            try:
+                r = _models.resolve(self.model, model_dir or None)
+            except Exception as e:
+                raise RosmontisError(
+                    "embed_provider_unavailable",
+                    f"embedding provider 'local'：{e}",
+                    retryable=False,
+                ) from e
+            self._local = LocalOnnxEmbedder(
+                r["onnx"], r["tokenizer"], r["dir"], fallback_dim=self.dim
+            )
+            self._local_fail_at: float | None = None   # local 推理失败的退避时点
 
         # ── 断路器状态 ──────────────────────────────────────
         self._clock = clock or time.monotonic
@@ -155,7 +195,7 @@ class Embedder:
             # 维度对不上的向量永远进不了余弦，等同于没有向量——但它不是
             # "服务挂了"，而是"配置写错了"，必须让运维看到区别。
             return "misconfigured"
-        if self.provider != "ollama":
+        if self.provider not in SEMANTIC_PROVIDERS:
             return "degraded"       # hash：有向量但不是语义向量，仅供测试/兜底
         return "degraded" if self.degraded else "semantic"
 
@@ -199,6 +239,18 @@ class Embedder:
                 self.degraded = True
                 self.degraded_reason = self.dim_mismatch
                 log.warning("embedding 维度不一致：%s", self.dim_mismatch)
+        elif self.provider == "openai":
+            v = self._try_remote(t)
+            if v is not None and len(v) != self.dim and not self.dim_mismatch:
+                self.dim_mismatch = (
+                    f"embed_dim 配置为 {self.dim}，但模型返回 {len(v)} 维；"
+                    f"请核对 ROSMONTIS_EMBED_DIM 与 {self.model_id or self.model} 的实际维度"
+                )
+                self.degraded = True
+                self.degraded_reason = self.dim_mismatch
+                log.warning("embedding 维度不一致：%s", self.dim_mismatch)
+        elif self.provider == "local":
+            v = self._try_local(t)
         elif self.provider == "hash":
             v = None
         else:  # none
@@ -214,7 +266,7 @@ class Embedder:
                 self.fallback_count += 1
         # 降级期的哈希向量不缓存：否则恢复后同一句话会直接命中旧哈希向量，
         # 永远等不到下一次远程探测（缓存键无法区分向量身份）。
-        cacheable = self.provider != "ollama" or not self.degraded
+        cacheable = self.provider not in SEMANTIC_PROVIDERS or not self.degraded
         if cacheable:
             self.cache.put(t, v)
         return v
@@ -231,7 +283,7 @@ class Embedder:
         ok = False
         detail = ""
         circuit = self.circuit_state()
-        if self.provider == "ollama":
+        if self.provider in ("ollama", "openai"):
             if not probe:
                 ok = self._available is True
                 detail = "circuit open" if circuit["state"] == "open" else (
@@ -242,6 +294,16 @@ class Embedder:
                 detail = f"circuit open，{circuit['next_probe_in']:.0f}s 后重探"
             else:
                 ok, detail = self._probe_health()
+        elif self.provider == "local":
+            if self._local_fail_at is not None:
+                ok = False
+                detail = f"上次推理失败，{LOCAL_RETRY_SECS:.0f}s 后重试"
+            elif self._local.loaded:
+                ok = True
+                detail = f"onnx ready（dim={self._local.dim}）"
+            else:
+                ok = True   # 惰性加载：还没加载不代表坏，能构造就说明文件都在
+                detail = "onnx 未加载（首次 embed 时加载）"
         elif self.provider == "hash":
             detail = "hash provider（非语义向量）"
         elif self.provider == "none":
@@ -258,6 +320,32 @@ class Embedder:
             "circuit": circuit,
             "detail": detail,
         }
+
+    # ── local ONNX 通道（无网络语义：不做断路器，失败退避后重试加载）──
+    def _try_local(self, text: str) -> list[float] | None:
+        now = self._clock()
+        if self._local_fail_at is not None and now < self._local_fail_at:
+            return None   # 退避期内直接降级，不反复撞同一个坏模型
+        try:
+            vec = self._local.embed(text)
+        except Exception as e:
+            log.warning("local 推理失败：%s；%.0fs 内降级 hash", e, LOCAL_RETRY_SECS)
+            self._local_fail_at = now + LOCAL_RETRY_SECS
+            self.degraded = True
+            self.degraded_reason = f"local 推理失败：{e}；{LOCAL_RETRY_SECS:.0f}s 内降级 hash"
+            return None
+        if self._local_fail_at is not None:
+            log.info("local 推理恢复")
+        self._local_fail_at = None
+        self.degraded = False
+        self.degraded_reason = None
+        # local 的维度以模型 config.json 为真值：资产表写错了也在这里对齐。
+        if self._local.dim and self._local.dim != self.dim:
+            log.warning(
+                "local 模型实际维度 %s 与配置 %s 不符，按模型维度对齐", self._local.dim, self.dim
+            )
+            self.dim = self._local.dim
+        return vec
 
     # ── 断路器 ────────────────────────────────────────────
     def _circuit_blocked(self) -> bool:
@@ -315,6 +403,18 @@ class Embedder:
     def _probe_health(self) -> tuple[bool, str]:
         now = self._clock()
         self.health_attempts += 1
+        if self.provider == "openai":
+            # OpenAI 兼容端点没有统一的 health 路由：直接发一次 1-token 请求探测
+            try:
+                v = self._embed_openai("健康探测")
+                if v:
+                    self._record_success()
+                    return True, f"embeddings ok（dim={len(v)}）"
+                self._record_failure(now)
+                return False, "响应里没有 embedding"
+            except Exception as e:  # pragma: no cover - 网络异常路径
+                self._record_failure(now)
+                return False, f"{type(e).__name__}: {e}"
         try:
             req = urllib.request.Request(self.ollama_url + "/api/tags")
             with urllib.request.urlopen(req, timeout=self.probe_timeout) as r:
@@ -330,6 +430,8 @@ class Embedder:
 
     # ── 远程调用 ──────────────────────────────────────────
     def _embed_remote(self, text: str) -> list[float] | None:
+        if self.provider == "openai":
+            return self._embed_openai(text)
         payload = json.dumps({"model": self.model, "input": text}).encode("utf-8")
         req = urllib.request.Request(
             self.ollama_url + "/api/embed",
@@ -349,6 +451,29 @@ class Embedder:
             return None
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as e:
             log.debug("embed remote failed: %s", e)
+            return None
+
+    def _embed_openai(self, text: str) -> list[float] | None:
+        """OpenAI 兼容 /v1/embeddings。失败返回 None，交给断路器。"""
+        payload = json.dumps({"model": self.model, "input": text}).encode("utf-8")
+        req = urllib.request.Request(
+            self.openai_base + "/embeddings",
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.openai_key}",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=self._remote_timeout or self.timeout) as r:
+                data = json.loads(r.read().decode("utf-8"))
+            rows = data.get("data") or []
+            if rows and isinstance(rows[0].get("embedding"), list):
+                return [float(x) for x in rows[0]["embedding"]]
+            return None
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError, KeyError) as e:
+            log.debug("embed openai failed: %s", e)
             return None
 
 

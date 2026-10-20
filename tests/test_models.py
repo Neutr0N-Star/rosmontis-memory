@@ -98,7 +98,7 @@ class ModelCase(unittest.TestCase):
         names = set(M.available())
         self.assertIn("bge-small-zh-v1.5", names)
         rows = {r["name"]: r for r in M.describe()}
-        self.assertEqual(rows["bge-small-zh-v1.5"]["dim"], 512)
+        self.assertEqual(rows["bge-small-zh-v1.5"]["dim"], 512)  # 实测（Xenova 导出 config.hidden_size=512）
 
     def test_install_downloads_and_writes_manifest(self):
         man = self._install()

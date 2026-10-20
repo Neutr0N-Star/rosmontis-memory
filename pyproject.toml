@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rosmontis-memory"
-version = "2.0.0"
+version = "2.1.0"
 description = "Rosmontis — 长期陪伴 AI 的记忆器官：五层记忆投影、预算约束检索、语义场、主被动一体记忆"
 readme = "README.md"
 requires-python = ">=3.10"

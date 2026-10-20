@@ -2,13 +2,21 @@
 
 本项目遵循语义化版本；`api_version`（对外接口版本）与包版本分开管理，破坏性接口改动才升。
 
-## [未发布]
+## [2.1.0] - 2026-10-20
 
-### Changed
+**语义检索补完**：`models install` 下载的模型从这一版起有了推理侧消费者，embedding 三条语义通道全部可用。
 
-- **性能默认值变化**：`numpy` 提为默认依赖（`dependencies = ["numpy>=1.24"]`），向量余弦与批量运算默认走 numpy；`numpy` extra 保留为兼容壳，`pip install -e ".[numpy]"` 继续可用。纯 Python 兜底仍在，未装 numpy 也能运行。
-- **备份改为在线备份 + 自检**：`rosmontis backup` 与迁移前备份改用 SQLite 在线备份 API，并核对核心表行数；并发读者在场时不再产出缺数据的 `.bak`，自检不过就报错退出（不再是 `rc=0` 假成功）。
-- **未实现的 embedding 通道启动即失败**：`ROSMONTIS_EMBED=local` / `openai` 或拼错的值不再静默降级为 `hash`，而是抛 `embed_provider_unavailable`；`context()` 新增 `vector_mode` / `degraded` / `degraded_reason` 三个字段。
+### Added
+
+- **`local` 通道：进程内 ONNX 推理**。`pip install "rosmontis-memory[embed]"` + `rosmontis models install bge-small-zh-v1.5` 即可离线跑语义检索，无 Ollama、无 API key。惰性加载（serve 启动不被模型加载阻塞）、维度自动从模型 `config.json` 的 `hidden_size` 读取、推理失败显式降级 hash 并点名原因（60s 退避后重试，不静默）。
+- **`openai` 通道：任意 OpenAI 兼容 `/v1/embeddings`**。配 `ROSMONTIS_EMBED_OPENAI_BASE` / `_KEY`（缺省回落到通用 `ROSMONTIS_OPENAI_BASE` / `_KEY`），走与 ollama 相同的断路器（30s 起指数退避、恢复自动切回语义）。
+- 缺配置 / 模型未安装 / 依赖缺失都在**构造时**报 `embed_provider_unavailable` 并给出修复命令，不进入"以为在跑语义、实际全库不落向量"的半失明状态。
+
+### Fixed
+
+- **模型下载器被 hf-mirror 拒绝**（HTTP 403）：镜像屏蔽默认 `Python-urllib` UA，下载请求补浏览器 UA 后恢复。
+- **local 通道维度以模型为真值**：运行时从模型 `config.json` 的 `hidden_size` 读取并自动对齐，资产表即使写错（本次实测发现人工核对也会看走眼）也不会产出维度不符的假向量或误报 `misconfigured`。
+- `vector_mode` 的语义通道集合从只认 `ollama` 扩展为 `{ollama, openai, local}`；三条通道失败时统一显式降级，降级期的哈希向量一律不进缓存。
 
 ## [2.0.0] - 2026-10-20
 

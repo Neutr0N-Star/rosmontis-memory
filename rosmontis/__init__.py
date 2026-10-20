@@ -7,7 +7,7 @@
 服务形态见 rosmontis.service.app。
 """
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 api_version = "1"
 
 __all__ = [

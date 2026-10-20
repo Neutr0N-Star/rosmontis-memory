@@ -79,6 +79,9 @@ def cmd_serve(args) -> int:
             ollama_url=_cfg.ollama_url,
             timeout=_cfg.embed_timeout,
             model_id=_cfg.embed_model_id,
+            openai_base=_cfg.embed_openai_base,
+            openai_key=_cfg.embed_openai_key,
+            model_dir=_cfg.embed_model_dir,
         )
     except Exception as e:  # 含 EmbedProviderError（RosmontisError 子类）等启动期错误
         code = getattr(e, "code", "")

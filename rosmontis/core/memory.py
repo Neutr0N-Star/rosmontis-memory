@@ -49,6 +49,9 @@ class Memory:
             ollama_url=self.cfg.ollama_url,
             timeout=self.cfg.embed_timeout,
             model_id=self.cfg.embed_model_id,  # 向量身份（v4）
+            openai_base=self.cfg.embed_openai_base,
+            openai_key=self.cfg.embed_openai_key,
+            model_dir=self.cfg.embed_model_dir,
         )
         self.llm_hot = LLM(
             provider=self.cfg.llm_hot,

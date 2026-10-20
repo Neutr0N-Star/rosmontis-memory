@@ -3,7 +3,7 @@
   "info": {
     "title": "Rosmontis",
     "description": "长期陪伴 AI 的记忆器官：五层记忆 + 三轴 + 预算约束检索",
-    "version": "2.0.0"
+    "version": "2.1.0"
   },
   "paths": {
     "/v1/episodes": {

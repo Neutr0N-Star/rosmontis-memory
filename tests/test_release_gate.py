@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import ast
 import math
 import os
 import re
@@ -22,6 +23,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import warnings
 from pathlib import Path
 from unittest import mock
 
@@ -42,6 +44,8 @@ CORE_DIR = ROOT / "rosmontis" / "core"
 # `(?='*' OR session_id=?)` 这种"用哨兵值绕开动态 SQL"的写法是有意的历史折中，
 # 但它让索引选择性消失、也让 as_of 类查询难审计。本轮只锁住**不新增**（棘轮）：
 # 规格没把清理排进这一批，直接断言 0 会让发布门禁永久红，而门禁永久红等于没有门禁。
+# 基线是用下面的 AST 扫描器（只数字符串常量、剔除注释与文档字符串）量出来的，
+# 不是用 grep 量的——两套口径对不上会让棘轮自己先失真。
 SID_STAR_BASELINE = {
     "field.py": 5,
     "forget.py": 1,
@@ -544,21 +548,64 @@ class TestPerformanceInvariant(unittest.TestCase):
         )
 
 
+# ── 哨兵式 session 过滤扫描（门禁与被测自身共用一套口径）──────
+# 只认字符串常量，绝不扫源码文本：一句「我们不用 (?='*' OR …)」的解释性注释
+# 就能让棘轮误红。门禁一旦会因为"解释为什么不用"而变红，就会被当成玄学绕开。
+# 反之，写宽一点：`? = '*'`（带空格）、`session_id = '*'`（不带占位符）、
+# 双引号版本都算——审查定稿里那处漏网的就是 `(? = '*' OR s.session_id = ?)`。
+_SID_STAR = re.compile(r"(?:\?|\b[A-Za-z_][\w.]*)\s*=\s*['\"]\*['\"]\s+OR")
+
+
+def _module_strings(src: str) -> list[str]:
+    """取模块里的字符串常量；文档字符串单独剔除（那是散文，不是 SQL）。"""
+    tree = ast.parse(src)
+    docs = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            body = getattr(node, "body", [])
+            if (
+                body
+                and isinstance(body[0], ast.Expr)
+                and isinstance(body[0].value, ast.Constant)
+                and isinstance(body[0].value.value, str)
+            ):
+                docs.add(id(body[0].value))
+    return [
+        n.value
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) not in docs
+    ]
+
+
+def count_sid_star(src: str) -> int:
+    """数源码里真正写在 SQL 字符串中的 `= '*' OR` 哨兵式过滤。
+
+    f-string 的字面片段也算：`f"(?='*' OR {col}=?)"` 会被拆成常量片段，
+    含哨兵的那一片照样命中。
+    已知盲区：先把哨兵存进变量再拼（`SID_ANY = "*"` + `+`）静态看不出来。
+    那种只能靠 review——写清盲区比假装覆盖了安全。
+    """
+    return sum(len(_SID_STAR.findall(s)) for s in _module_strings(src))
+
+
+def count_sid_star_file(path: Path) -> int:
+    # utf-8-sig：仓库里有带 BOM 的模块（core/item.py），而 ast.parse 不吃 BOM
+    return count_sid_star(path.read_text(encoding="utf-8-sig"))
+
+
 # ── 其他门禁 ──────────────────────────────────────────────────
 class TestReleaseHygiene(unittest.TestCase):
-    _SID_STAR = re.compile(r"\?=\s*'\*'\s+OR")
-
     def test_no_new_sid_star_or_antipattern(self):
         """`rosmontis/core/` 不再**新增** `(?='*' OR ...)` 反模式（audit.py 本轮白名单）。
 
         棘轮而非归零：规格没把清理排进本批，断言 0 会让门禁永久红。
-        真清理时同步下调 SID_STAR_BASELINE。
+        真清理时同步下调 SID_STAR_BASELINE（下面的提示会提醒，但不算失败）。
         """
         current = {}
         for path in sorted(CORE_DIR.glob("*.py")):
             if path.name in SID_STAR_WHITELIST:
                 continue
-            n = len(self._SID_STAR.findall(path.read_text(encoding="utf-8")))
+            n = count_sid_star_file(path)
             if n:
                 current[path.name] = n
 
@@ -567,6 +614,43 @@ class TestReleaseHygiene(unittest.TestCase):
             grew, {},
             f"新增了哨兵式 session 过滤（基线 {SID_STAR_BASELINE}，现在 {current}）",
         )
+
+        # 基线只许"够高"，不许变成装饰：真清理了就得把数字降下来，
+        # 否则下次有人加回去时棘轮还是绿的。不降不算失败，只提醒。
+        lowered = {k: current.get(k, 0) for k in SID_STAR_BASELINE
+                   if current.get(k, 0) < SID_STAR_BASELINE[k]}
+        if lowered:
+            warnings.warn(
+                f"棘轮基线已过期：{lowered} 已低于 SID_STAR_BASELINE，"
+                "请把基线调到当前值，否则这门禁挡不住回潮",
+                stacklevel=2,
+            )
+
+    def test_comment_and_docstring_mentions_are_not_counted(self):
+        """注释/文档字符串里**解释**该写法不算违规（误报会把门禁变成玄学）。"""
+        code = (
+            "# 这里按需拼 session 条件，不用 (?='*' OR session_id=?) 这种哨兵\n"
+            '"""把 (? = \'*\' OR col=?) 换成按需拼接，别照抄。"""\n'
+            'SQL = "SELECT id FROM episode WHERE archived=1"\n'
+        )
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "mod.py"
+            path.write_text(code, encoding="utf-8")
+            self.assertEqual(count_sid_star_file(path), 0)
+
+    def test_real_sentinel_is_counted(self):
+        """真写了哨兵（含带空格与 f-string 两种写法）→ 计数 +1，棘轮本身不瞎。"""
+        spellings = [
+            'SQL = "SELECT 1 FROM episode WHERE (?=\'*\' OR session_id=?)"',
+            'SQL = f"SELECT 1 FROM episode WHERE (? = \'*\' OR {col}=?)"',
+            'SQL = "SELECT 1 FROM episode WHERE (session_id = \'*\' OR id=?)"',
+        ]
+        with tempfile.TemporaryDirectory() as d:
+            for i, code in enumerate(spellings):
+                path = Path(d) / f"mod{i}.py"
+                path.write_text(code + "\n", encoding="utf-8")
+                with self.subTest(code=code):
+                    self.assertEqual(count_sid_star_file(path), 1)
 
     def test_version_consistency_is_covered_elsewhere(self):
         """版本三处一致（pyproject / rosmontis.__version__ / openapi.json）已有测试覆盖。

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""藏识 Rosmontis 启动器。
+"""Rosmontis 启动器。
 
 用法：
     python run.py serve            启动服务（默认 8770）
@@ -21,7 +21,7 @@ sys.path.insert(0, str(ROOT))
 
 BANNER = r"""
   ┌─────────────────────────────────────────┐
-  │  藏识 Rosmontis · 长期记忆器官               │
+  │  Rosmontis · 长期记忆器官               │
   │  五层记忆 · 三档注入 · 预算约束检索       │
   └─────────────────────────────────────────┘
 """

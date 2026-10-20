@@ -1,4 +1,4 @@
-# 藏识 Rosmontis · 质量基准与帕累托报告
+# Rosmontis · 质量基准与帕累托报告
 
 > 本文件由 `bench/pareto.py` 自动生成，**所有数字来自同一次脚本运行**；手工改动会被下次运行覆盖。
 > 复现：`PYTHONIOENCODING=utf-8 python bench/pareto.py`（数据集另可用 `PYTHONIOENCODING=utf-8 python bench/dataset/gen_dataset.py` 重生成，种子固定）。

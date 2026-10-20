@@ -542,7 +542,7 @@ def build_report(ctx: dict) -> str:
     fc = ctx["field_comparison"]
     base = mbn["baseline_uniform"]
     return f"""\
-# 藏识 Rosmontis · 质量基准与帕累托报告
+# Rosmontis · 质量基准与帕累托报告
 
 > 本文件由 `bench/pareto.py` 自动生成，**所有数字来自同一次脚本运行**；手工改动会被下次运行覆盖。
 > 复现：`{ds['commands']['pareto']}`（数据集另可用 `{ds['commands']['generate']}` 重生成，种子固定）。

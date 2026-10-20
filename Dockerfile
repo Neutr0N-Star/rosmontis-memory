@@ -1,4 +1,4 @@
-# 藏识 Rosmontis 本地服务镜像
+# Rosmontis 本地服务镜像
 # 构建：docker build -t rosmontis-memory .
 # 运行：docker run -p 127.0.0.1:8770:8770 -v rosmontis-data:/data rosmontis-memory
 #      首次启动会把访问 token 写入卷（/data/token）并打印到日志；客户端带

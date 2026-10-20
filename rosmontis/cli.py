@@ -105,7 +105,7 @@ def cmd_serve(args) -> int:
         os.environ["ROSMONTIS_TOKEN"] = token
         print(f"本地访问 token（首次生成，已写入 {token_path()}）：{token}", flush=True)
 
-    print(f"藏识 Rosmontis 启动中 → http://{args.host}:{args.port}", flush=True)
+    print(f"Rosmontis 启动中 → http://{args.host}:{args.port}", flush=True)
     print(f"接口文档 → http://{args.host}:{args.port}/docs", flush=True)
     uvicorn.run("rosmontis.service.app:app", host=args.host, port=args.port, reload=args.reload, log_level="info")
     return 0
@@ -565,7 +565,7 @@ def cmd_demo(args) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="rosmontis", description="藏识 Rosmontis — 长期记忆系统")
+    p = argparse.ArgumentParser(prog="rosmontis", description="Rosmontis — 长期记忆系统")
     p.add_argument("--db", default=None, help="数据库路径")
     p.add_argument(
         "--version", "-V",

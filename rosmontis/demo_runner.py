@@ -92,7 +92,7 @@ def run_demo(args) -> int:
     m = Memory(cfg)
 
     print("=" * 64)
-    print("藏识 Rosmontis · 三个月对话演示")
+    print("Rosmontis · 三个月对话演示")
     print(f"数据库：{os.path.abspath(db)}")
     print("=" * 64)
 

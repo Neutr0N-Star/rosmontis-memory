@@ -227,7 +227,7 @@ def _write_env_file(patch: dict) -> None:
             d.pop(k, None)
         else:
             d[k] = str(v)
-    lines = ["# 藏识 Rosmontis 本地配置（自动生成，密钥不要提交）"]
+    lines = ["# Rosmontis 本地配置（自动生成，密钥不要提交）"]
     for k in sorted(d):
         lines.append(f"{k}={d[k]}")
     _ENV_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -435,7 +435,7 @@ def create_app() -> FastAPI:
         )
 
     app = FastAPI(
-        title="藏识 Rosmontis",
+        title="Rosmontis",
         version=_ROSMONTIS_VERSION,
         description="长期陪伴 AI 的记忆器官：五层记忆 + 三轴 + 预算约束检索",
         lifespan=_lifespan,

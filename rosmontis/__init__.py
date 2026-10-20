@@ -1,4 +1,4 @@
-﻿"""藏识 Rosmontis — 长期陪伴 AI 的记忆器官。
+﻿"""Rosmontis — 长期陪伴 AI 的记忆器官。
 
 对外三层入口：
 - `rosmontis.open(db_path, config)` → `Handle`（稳定公共 API v1，见 rosmontis/api.py）

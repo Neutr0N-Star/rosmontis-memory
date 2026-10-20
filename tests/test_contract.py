@@ -18,6 +18,10 @@ import rosmontis  # noqa: E402
 
 
 def _pyproject() -> dict:
+    try:
+        import tomllib
+    except ModuleNotFoundError:  # Python 3.10：标准库没有 tomllib，用 tomli
+        import tomli as tomllib
     with open(ROOT / "pyproject.toml", "rb") as fh:
         return tomllib.load(fh)
 

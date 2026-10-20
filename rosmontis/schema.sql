@@ -1,4 +1,4 @@
--- 藏识 Rosmontis schema v4（特化版：面向长期陪伴 AI 的人格记忆）
+-- Rosmontis schema v4（特化版：面向长期陪伴 AI 的人格记忆）
 -- 时间统一 epoch 秒（REAL）。物理删除只发生在 tombstone 明确记录之后。
 -- v3 只加列/加表（A2 §3.3）：episode 的 origin/state/state_at/gate_version、
 -- fact 的 origin/archived、item_state_log；旧列保留为兼容投影，不删不改。

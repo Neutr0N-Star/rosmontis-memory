@@ -113,17 +113,17 @@ harness 把这些固化下来，接入方只需要：把用户说的话交给它
 
 | 工具 | 什么时候用 | 副作用 |
 |---|---|---|
-| `alaya_remember` | 觉得这件事值得留给以后的自己 | 写一条笔记（可能进速记层） |
-| `alaya_recall` | 想主动查一件事（不是被动注入的） | 无 |
-| `alaya_promote` | 一条笔记反复想到，觉得该变成"我就是这样" | **改人设**，受闸门 |
-| `alaya_revise` | 发现以前记错了 | 订正，原文保留 |
-| `alaya_skip` | 不想再提某件事 | 降低激活，不删除 |
+| `rosmontis_remember` | 觉得这件事值得留给以后的自己 | 写一条笔记（可能进速记层） |
+| `rosmontis_recall` | 想主动查一件事（不是被动注入的） | 无 |
+| `rosmontis_promote` | 一条笔记反复想到，觉得该变成"我就是这样" | **改人设**，受闸门 |
+| `rosmontis_revise` | 发现以前记错了 | 订正，原文保留 |
+| `rosmontis_skip` | 不想再提某件事 | 降低激活，不删除 |
 
-`alaya_skip` 这个工具很关键——它对应"这件事我不想再提了"。没有这个出口，所有记忆都只能靠衰减慢慢冷掉；有了它，她可以主动说"这个别再提"。
+`rosmontis_skip` 这个工具很关键——它对应"这件事我不想再提了"。没有这个出口，所有记忆都只能靠衰减慢慢冷掉；有了它，她可以主动说"这个别再提"。
 
 ### 闸门在工具层的表现
 
-`alaya_promote` 被拒绝时，**要返回明确原因，不能静默失败**：
+`rosmontis_promote` 被拒绝时，**要返回明确原因，不能静默失败**：
 
 ```json
 {"ok": false, "reason": "单次会话最多改 2 次人设（已用 2 次）。人格不该每天推翻"}
@@ -139,7 +139,7 @@ harness 把这些固化下来，接入方只需要：把用户说的话交给它
 | 工具调用归一化 / 响应解析 / `chat_with_tools` / `make_llm_callable` | `harness.py` 模块级 | 协议适配，可复用 |
 | `Harness` 类（wake / turn / sleep / tick） | `harness.py` | **参考编排器**：可整体替换；宿主自管循环时不必使用 |
 | `dispatch` | `tools.py` | **契约本体**：工具执行 |
-| `alaya/harness_demo.py` 与 `examples/hooks_demo.py` | 仓库内 | 可运行示例（假模型，不依赖网络） |
+| `rosmontis/harness_demo.py` 与 `examples/hooks_demo.py` | 仓库内 | 可运行示例（假模型，不依赖网络） |
 
 `Harness` 不绑定任何 LLM SDK——它接收一个 `llm_callable(messages, tools) -> response`，你可以塞 OpenAI、Ollama、DeepSeek 或一个假模型进去。
 

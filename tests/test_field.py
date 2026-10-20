@@ -19,13 +19,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from alaya import Config  # noqa: E402
-from alaya.core import db as DB  # noqa: E402
-from alaya.core import field as F  # noqa: E402
-from alaya.core import forget as FG  # noqa: E402
-from alaya.core import memory_field as MF  # noqa: E402
-from alaya.core import score as SC  # noqa: E402
-from alaya.core.memory import Memory  # noqa: E402
+from rosmontis import Config  # noqa: E402
+from rosmontis.core import db as DB  # noqa: E402
+from rosmontis.core import field as F  # noqa: E402
+from rosmontis.core import forget as FG  # noqa: E402
+from rosmontis.core import memory_field as MF  # noqa: E402
+from rosmontis.core import score as SC  # noqa: E402
+from rosmontis.core.memory import Memory  # noqa: E402
 
 
 class FakeLLM:
@@ -53,7 +53,7 @@ class FakeLLM:
 @contextmanager
 def scenario(tag: str):
     """建一个临时库；退出时关连接、删目录。"""
-    d = tempfile.mkdtemp(prefix=f"alaya_field_{tag}_")
+    d = tempfile.mkdtemp(prefix=f"rosmontis_field_{tag}_")
     cfg = Config(
         db_path=os.path.join(d, "t.db"),
         embed_provider="hash",
@@ -310,15 +310,15 @@ class TestRecallFieldWiring(unittest.TestCase):
     def test_switch_off(self):
         with scenario("off") as (m, fake, cfg):
             seed_cat(m, fake, time.time())
-            old = os.environ.get("ALAYA_FIELD")
-            os.environ["ALAYA_FIELD"] = "0"
+            old = os.environ.get("ROSMONTIS_FIELD")
+            os.environ["ROSMONTIS_FIELD"] = "0"
             try:
                 r = m.recall("团子是谁", session_id="s")
             finally:
                 if old is None:
-                    os.environ.pop("ALAYA_FIELD", None)
+                    os.environ.pop("ROSMONTIS_FIELD", None)
                 else:
-                    os.environ["ALAYA_FIELD"] = old
+                    os.environ["ROSMONTIS_FIELD"] = old
             self.assertFalse(r["plan"]["field_enabled"])
             self.assertEqual(r["plan"]["seeds"], 0)
             self.assertEqual(r["plan"]["iterations"], 0)

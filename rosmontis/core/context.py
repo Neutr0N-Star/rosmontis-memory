@@ -35,7 +35,8 @@ def build_context(
     返回的 `prompt` 已经是拼好的文本，`parts` 里是分块明细。
     """
     t0 = time.perf_counter()
-    now = as_of or time.time()
+    # `as_of` 用 is None 判：0.0 是"时间轴原点"，不是"没传"
+    now = time.time() if as_of is None else float(as_of)
 
     persona_text = ""
     persona_meta: dict = {}

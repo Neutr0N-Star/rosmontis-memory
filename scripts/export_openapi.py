@@ -20,7 +20,7 @@ sys.path.insert(0, str(ROOT))
 
 def main() -> int:
     try:
-        from alaya.service.app import create_app
+        from rosmontis.service.app import create_app
     except ImportError as e:  # 没装 fastapi 时给出人话提示，不抛栈
         print("导出失败：需要服务依赖。先跑 pip install -e \".[serve]\"")
         print(f"原因：{e}")

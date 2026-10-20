@@ -16,9 +16,9 @@ import unittest
 ROOT = __import__("pathlib").Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from alaya.config import Config  # noqa: E402
-from alaya.core import db as DB  # noqa: E402
-from alaya.harness import Harness  # noqa: E402
+from rosmontis.config import Config  # noqa: E402
+from rosmontis.core import db as DB  # noqa: E402
+from rosmontis.harness import Harness  # noqa: E402
 
 
 class RecordingLLM:
@@ -36,7 +36,7 @@ class RecordingLLM:
 
 
 def make_harness(tag: str, responses) -> tuple[Harness, str, str]:
-    d = tempfile.mkdtemp(prefix=f"alaya_stream_{tag}_")
+    d = tempfile.mkdtemp(prefix=f"rosmontis_stream_{tag}_")
     db_path = os.path.join(d, "t.db")
     cfg = Config()
     cfg.db_path = db_path
@@ -90,7 +90,7 @@ class StreamCase(unittest.TestCase):
                     "content": "",
                     "tool_calls": [
                         {
-                            "name": "alaya_remember",
+                            "name": "rosmontis_remember",
                             "arguments": {"what": "他说他搬到上海了", "noticed": "提到新城市"},
                         }
                     ],
@@ -109,7 +109,7 @@ class StreamCase(unittest.TestCase):
         done = events[-1]["data"]
         self.assertEqual(done["reply"], "记住了，上海。")
         self.assertEqual(len(done["tools_called"]), 1)
-        self.assertEqual(done["tools_called"][0]["tool"], "alaya_remember")
+        self.assertEqual(done["tools_called"][0]["tool"], "rosmontis_remember")
 
     def test_assistant_text_written_only_after_full_stream(self):
         h, db_path, d = make_harness("write", [{"content": "嗯，我在听。"}])

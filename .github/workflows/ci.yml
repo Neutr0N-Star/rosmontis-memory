@@ -50,10 +50,10 @@ jobs:
         run: python -m twine check dist/*
       - name: Wheel must contain schema.sql and py.typed
         run: |
-          python -m zipfile -l dist/*.whl | grep -E "alaya/(schema\.sql|py\.typed)"
+          python -m zipfile -l dist/*.whl | grep -E "rosmontis/(schema\.sql|py\.typed)"
       - name: Install wheel in clean venv and smoke
         run: |
           python -m venv /tmp/venv
           /tmp/venv/bin/pip install dist/*.whl
-          /tmp/venv/bin/python -c "import alaya, tempfile, os; d=tempfile.mkdtemp(); h=alaya.open(os.path.join(d,'t.db')); h.wake('u','c'); h.observe('u','c','我搬到上海了','记住了'); print('ctx', h.context('u','c','我住哪',budget=200)['tokens']); h.close()"
-          /tmp/venv/bin/alaya --version
+          /tmp/venv/bin/python -c "import rosmontis, tempfile, os; d=tempfile.mkdtemp(); h=rosmontis.open(os.path.join(d,'t.db')); h.wake('u','c'); h.observe('u','c','我搬到上海了','记住了'); print('ctx', h.context('u','c','我住哪',budget=200)['tokens']); h.close()"
+          /tmp/venv/bin/rosmontis --version

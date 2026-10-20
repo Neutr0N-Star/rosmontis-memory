@@ -18,14 +18,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from alaya import Config  # noqa: E402
-from alaya.core import db as DB  # noqa: E402
-from alaya.core import jobs  # noqa: E402
-from alaya.core import pipeline as TR  # noqa: E402
-from alaya.core import recall as RC  # noqa: E402
-from alaya.core import vec as V  # noqa: E402
-from alaya.core.embed import BACKOFF_MAX, BACKOFF_BASE, Embedder  # noqa: E402
-from alaya.core.item import MemoryItem  # noqa: E402
+from rosmontis import Config  # noqa: E402
+from rosmontis.core import db as DB  # noqa: E402
+from rosmontis.core import jobs  # noqa: E402
+from rosmontis.core import pipeline as TR  # noqa: E402
+from rosmontis.core import recall as RC  # noqa: E402
+from rosmontis.core import vec as V  # noqa: E402
+from rosmontis.core.embed import BACKOFF_MAX, BACKOFF_BASE, Embedder  # noqa: E402
+from rosmontis.core.item import MemoryItem  # noqa: E402
 
 NOW = 1_792_368_000.0
 
@@ -59,9 +59,9 @@ class FakeLLM:
 
 def mk_memory(tag: str, *, dim: int = 8, provider: str = "ollama", model_id: str = "fake-model"):
     """离线 Memory：真实 Embedder 只构造不联网，随后整体替换为测试桩。"""
-    from alaya.core.memory import Memory
+    from rosmontis.core.memory import Memory
 
-    d = tempfile.mkdtemp(prefix=f"alaya_{tag}_")
+    d = tempfile.mkdtemp(prefix=f"rosmontis_{tag}_")
     cfg = Config(
         db_path=os.path.join(d, "t.db"),
         embed_provider=provider,
@@ -242,7 +242,7 @@ def _make_v3_db(path: str) -> None:
 
 class TestVectorIdentityMigration(unittest.TestCase):
     def setUp(self):
-        self.dir = tempfile.mkdtemp(prefix="alaya_v4_")
+        self.dir = tempfile.mkdtemp(prefix="rosmontis_v4_")
         self.path = os.path.join(self.dir, "v3.db")
 
     def tearDown(self):
@@ -294,10 +294,10 @@ class TestVectorIdentityMigration(unittest.TestCase):
         finally:
             conn.close()
 
-    @unittest.skipUnless((ROOT / "alaya.db").exists(), "真库 alaya.db 不在，跳过副本实测")
+    @unittest.skipUnless((ROOT / "rosmontis.db").exists(), "真库 rosmontis.db 不在，跳过副本实测")
     def test_real_db_copy_to_v4(self):
-        real = str(ROOT / "alaya.db")
-        copy = os.path.join(self.dir, "alaya_copy.db")
+        real = str(ROOT / "rosmontis.db")
+        copy = os.path.join(self.dir, "rosmontis_copy.db")
         src = sqlite3.connect(f"file:{real.replace(os.sep, '/')}?mode=ro", uri=True)
         dst = sqlite3.connect(copy)
         try:
@@ -436,9 +436,9 @@ class TestEmbedBackfill(unittest.TestCase):
             teardown(mem, d)
 
     def test_hash_provider_reports_degraded_mode(self):
-        from alaya.core.memory import Memory
+        from rosmontis.core.memory import Memory
 
-        d = tempfile.mkdtemp(prefix="alaya_hashmode_")
+        d = tempfile.mkdtemp(prefix="rosmontis_hashmode_")
         try:
             cfg = Config(db_path=os.path.join(d, "t.db"), embed_provider="hash", llm_hot="rule",
                          llm_deep="rule", log_level="ERROR", auto_forget=False, embed_dim=8)

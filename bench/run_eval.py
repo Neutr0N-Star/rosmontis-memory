@@ -7,7 +7,7 @@
     PYTHONIOENCODING=utf-8 python bench/run_eval.py --backend llm       # 有 Ollama 才真跑
 
 约束
-- 只读 `alaya/`；评测库建在系统临时目录，跑完删除；不碰 `alaya.db`。
+- 只读 `rosmontis/`；评测库建在系统临时目录，跑完删除；不碰 `rosmontis.db`。
 - 缺 Ollama / 缺网络不报错：自动回退「脚本化金标 + 规则抽取 + 哈希向量」，并在
   JSON 的 ``meta.extraction_backend`` / ``meta.embed_backend`` 里显式标注降级。
 - 所有数字由本脚本产出，禁止手工填写。
@@ -31,11 +31,11 @@ import common as C
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    ap = argparse.ArgumentParser(description="alaya-memory 质量基准评测")
+    ap = argparse.ArgumentParser(description="rosmontis-memory 质量基准评测")
     ap.add_argument("--backend", choices=["scripted", "rule", "llm"], default="scripted",
                     help="抽取后端；默认 scripted=脚本化金标（确定性，用于隔离检索链路）")
     ap.add_argument("--field", choices=["on", "off"], default=None,
-                    help="语义场开关；默认读环境变量 ALAYA_FIELD（缺省 on）")
+                    help="语义场开关；默认读环境变量 ROSMONTIS_FIELD（缺省 on）")
     ap.add_argument("--embed", choices=["hash", "ollama"], default="hash",
                     help="embedding 后端；默认 hash（无 Ollama 时的确定性降级）")
     ap.add_argument("--budget", type=int, default=1400, help="检索注入 token 预算（默认 1400）")
@@ -50,7 +50,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def _resolve_field(value: str | None) -> str:
     if value:
         return value
-    env = os.environ.get("ALAYA_FIELD", "on").strip().lower()
+    env = os.environ.get("ROSMONTIS_FIELD", "on").strip().lower()
     return "off" if env in ("0", "false", "off", "no") else "on"
 
 
@@ -61,11 +61,11 @@ def _print_summary(payload: dict) -> None:
     wf = payload["write_fidelity"]
     ret = payload["retrieval"]
     print("=" * 72)
-    print("alaya-bench · 质量评测")
+    print("rosmontis-bench · 质量评测")
     print("=" * 72)
     print(f"数据集        : {ds['dialogues']} 段对话 / {ds['turns']} turn / {ds['questions']} 题（种子 {ds['seed']}）")
     print(f"抽取后端      : {meta['extraction_backend']}  ·  embedding: {meta['embed_backend']}")
-    print(f"语义场        : ALAYA_FIELD={meta['field_env']}（原生开关 {meta['field_backend']['native_switch']}）")
+    print(f"语义场        : ROSMONTIS_FIELD={meta['field_env']}（原生开关 {meta['field_backend']['native_switch']}）")
     print(f"核心版本      : git {str(meta['code'].get('git_head') or '?')[:10]} · dirty core {len(meta['code'].get('dirty_core_files') or [])} 个")
     print("-" * 72)
     print("[抽取质量] 规则兜底（离线真实能力）")
@@ -117,7 +117,7 @@ def main(argv: list[str] | None = None) -> int:
             hops=None,
             budget=int(args.budget),
             uniform_depth=False,
-            note="产品默认反射深度与预算倍率，只按 ALAYA_FIELD 切换场",
+            note="产品默认反射深度与预算倍率，只按 ROSMONTIS_FIELD 切换场",
         )
         ext_active = C.measure_extraction(
             data["conversations"],

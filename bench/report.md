@@ -1,4 +1,4 @@
-# 藏识 Alaya · 质量基准与帕累托报告
+# 藏识 Rosmontis · 质量基准与帕累托报告
 
 > 本文件由 `bench/pareto.py` 自动生成，**所有数字来自同一次脚本运行**；手工改动会被下次运行覆盖。
 > 复现：`PYTHONIOENCODING=utf-8 python bench/pareto.py`（数据集另可用 `PYTHONIOENCODING=utf-8 python bench/dataset/gen_dataset.py` 重生成，种子固定）。
@@ -19,8 +19,8 @@ p95 延迟 +49.1%，平均注入 token +21.9%。
 - 数据集指纹：manifest sha256 校验通过；`conversations.jsonl`=956e0092fa4aa852…, `questions.jsonl`=91d2ee210a4f75d4…, `sessions.json`=1805f1d8c506ad43…
 - 运行环境：Python 3.12.10 · numpy 2.2.6 · jieba 缺失（字符二元组分词） · embedding `hash`。
 - 抽取后端：`scripted`（脚本化金标抽取，用于隔离检索/打包链路；离线规则抽取单列）。
-- 语义场：`ALAYA_FIELD` 原生开关 = True，recall 已接场 = True；D 走 `memory_field.DEFAULT_GAMMA`，迭代次数走 `REFLEX_DEPTH[*].hops`。
-- 代码指纹：git `59a186cfee1c`，工作区 `alaya/` 未提交改动 5 个（核心施工期，集成完成后应用同一命令重跑刷新数字）。
+- 语义场：`ROSMONTIS_FIELD` 原生开关 = True，recall 已接场 = True；D 走 `memory_field.DEFAULT_GAMMA`，迭代次数走 `REFLEX_DEPTH[*].hops`。
+- 代码指纹：git `59a186cfee1c`，工作区 `rosmontis/` 未提交改动 5 个（核心施工期，集成完成后应用同一命令重跑刷新数字）。
 - 生成时间：2026-10-20T11:44:31+08:00；DB 构建 0.546s（episode=400, fact_active=100, entity=119, state_open=30, hyperedge=50）。
 
 生成器：`bench/dataset/gen_dataset.py`（纯标准库、固定种子、无网络）。产物：
@@ -104,7 +104,7 @@ p95 延迟 +49.1%，平均注入 token +21.9%。
 
 支配判定按 docs/15 §2.2：7 项质量指标全不劣、3 项成本全不劣且至少一项严格更优。前沿之外的配置都能被前沿里某组支配。
 
-## 6. 场地基对比（ALAYA_FIELD on/off）
+## 6. 场地基对比（ROSMONTIS_FIELD on/off）
 
 | 指标 | 场开 | 场关 | 差值（开-关） |
 |---|---|---|---|
@@ -127,7 +127,7 @@ p95 延迟 +49.1%，平均注入 token +21.9%。
 
 | 参数 | 最佳取值 | 质量综合变化 | token 变化 | p95 变化 |
 |---|---|---|---|---|
-| 场开关（ALAYA_FIELD） | `field_off` | -0.0171 | -41.1% | -55.9% |
+| 场开关（ROSMONTIS_FIELD） | `field_off` | -0.0171 | -41.1% | -55.9% |
 | 扩散强度 D | `D_low` | +0.0000 | +0.0% | +70.3% |
 | 扩散迭代次数 | `hops_3` | +0.0002 | +21.9% | +49.1% |
 | 检索深度 k | `depth_deep` | +0.0000 | +1.5% | +28.8% |
@@ -181,7 +181,7 @@ python bench/run_eval.py --backend llm --extraction-limit 50
 
 1. **合成数据的边界**：对话与金标均由模板生成，句式和实体池有限，分布比真实对话窄；金标是程序化标注，与 docs/15 §2.1 要求的「人工 golden set 200 段」不等价。它能验证管线可测、可复现与相对排序，不能替代真实标注集。
 2. **离线降级显著影响数字**：本机无 Ollama/无 jieba，embedding 走哈希伪向量且核心在降级时不落库向量，稠密路实际退化；分词退化为字符二元组。因此「拒答误召率」偏高主要来自 FTS 把「为什么/怎么/什么」这类问题词当关键词命中（详见下文与阈值扫描），有真语义向量后应重跑。
-3. **核心仍在施工**：评测时 `alaya/` 有 5 个未提交改动（alaya/core/item.py, alaya/core/memory.py, alaya/core/persona.py, alaya/demo_runner.py, alaya/harness.py）。集成完成后必须用同一命令重跑，数字以重跑结果为准。
+3. **核心仍在施工**：评测时 `rosmontis/` 有 5 个未提交改动（rosmontis/core/item.py, rosmontis/core/memory.py, rosmontis/core/persona.py, rosmontis/demo_runner.py, rosmontis/harness.py）。集成完成后必须用同一命令重跑，数字以重跑结果为准。
 4. **延迟是单机测量**：绝对值受机器负载影响，跨机器不可比；只用于同机横向比较。p95 基于每题 2 次重复的均值。
 5. **场参数映射**：当前 D 走 `memory_field.DEFAULT_GAMMA`，迭代次数走 `REFLEX_DEPTH[*].hops`；若 WS-B 把扩散参数改为 cfg 字段，`bench/common.py` 的 `applied_config()` 是唯一需要改的地方（报告与脚本无需变化）。
 6. **不评价生成质量**：基准没有答案文本生成环节，多跳/比较类题判定的是「可作答证据是否齐备」，不是最终自然语言回答的正确性。

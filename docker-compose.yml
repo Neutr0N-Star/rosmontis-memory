@@ -1,5 +1,5 @@
 services:
-  alaya:
+  rosmontis:
     build: .
     # 只绑本机：默认不把记忆服务暴露到局域网/公网
     ports:
@@ -7,15 +7,15 @@ services:
     volumes:
       - ./data:/data
     environment:
-      ALAYA_HOME: /data
+      ROSMONTIS_HOME: /data
       # 访问 token：留空则首次启动自动生成并打印在日志里；
-      # 也可在 shell 里 export ALAYA_TOKEN=... 显式指定。
-      ALAYA_TOKEN: ${ALAYA_TOKEN:-}
+      # 也可在 shell 里 export ROSMONTIS_TOKEN=... 显式指定。
+      ROSMONTIS_TOKEN: ${ROSMONTIS_TOKEN:-}
       # 离线降级示例；接自己的模型时改成：
-      # ALAYA_EMBED: ollama
-      # ALAYA_LLM_HOT: openai
-      # ALAYA_OPENAI_BASE: https://api.deepseek.com/v1
-      # ALAYA_OPENAI_KEY: ${ALAYA_OPENAI_KEY}
-      ALAYA_EMBED: hash
-      ALAYA_LLM_HOT: rule
+      # ROSMONTIS_EMBED: ollama
+      # ROSMONTIS_LLM_HOT: openai
+      # ROSMONTIS_OPENAI_BASE: https://api.deepseek.com/v1
+      # ROSMONTIS_OPENAI_KEY: ${ROSMONTIS_OPENAI_KEY}
+      ROSMONTIS_EMBED: hash
+      ROSMONTIS_LLM_HOT: rule
     restart: unless-stopped

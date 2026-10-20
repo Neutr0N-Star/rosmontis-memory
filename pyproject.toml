@@ -3,13 +3,13 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "alaya-memory"
-version = "1.1.1"
-description = "藏识 Alaya — 长期陪伴 AI 的记忆器官：五层记忆投影、预算约束检索、语义场、主被动一体记忆"
+name = "rosmontis-memory"
+version = "2.0.0"
+description = "藏识 Rosmontis — 长期陪伴 AI 的记忆器官：五层记忆投影、预算约束检索、语义场、主被动一体记忆"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-authors = [{ name = "Alaya contributors" }]
+authors = [{ name = "Rosmontis contributors" }]
 keywords = ["memory", "llm", "agent", "long-term-memory", "sqlite"]
 classifiers = [
   "Development Status :: 4 - Beta",
@@ -28,7 +28,7 @@ dependencies = ["numpy>=1.24"]
 # numpy 已是默认依赖：这个 extra 只作为「老安装命令继续可用」的兼容壳，
 # `pip install -e ".[numpy]"` 不会报错，也不会多装东西。
 numpy = ["numpy>=1.24"]
-# HTTP 服务形态（alaya serve）
+# HTTP 服务形态（rosmontis serve）
 serve = ["fastapi>=0.110", "uvicorn>=0.27", "pydantic>=2", "jieba>=0.42"]
 # 本地语义向量：当前**无推理侧消费者**（见 docs/17 §8.1，`local` 通道待交付）。
 # extra 保留只为不破坏既有安装命令 `pip install -e ".[embed]"`。
@@ -37,14 +37,14 @@ embed = ["onnxruntime>=1.18", "tokenizers>=0.15"]
 dev = ["numpy>=1.24", "fastapi>=0.110", "uvicorn>=0.27", "pydantic>=2", "jieba>=0.42"]
 
 [project.scripts]
-alaya = "alaya.cli:main"
+rosmontis = "rosmontis.cli:main"
 
 [tool.setuptools]
 license-files = ["LICENSE"]
 
 [tool.setuptools.packages.find]
-include = ["alaya*"]
+include = ["rosmontis*"]
 
 [tool.setuptools.package-data]
-alaya = ["schema.sql", "py.typed"]
+rosmontis = ["schema.sql", "py.typed"]
 

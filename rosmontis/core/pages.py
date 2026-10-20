@@ -20,7 +20,7 @@ from . import ids as IDS
 from . import text as TX
 from .llm import LLM
 
-log = logging.getLogger("alaya.pages")
+log = logging.getLogger("rosmontis.pages")
 
 # 预置页面：key → (标题, 数据来源说明)
 PAGE_DEFS = {

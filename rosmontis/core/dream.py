@@ -29,7 +29,7 @@ from . import pipeline as TR
 from . import text as TX
 from .llm import LLM
 
-log = logging.getLogger("alaya.dream")
+log = logging.getLogger("rosmontis.dream")
 
 MIN_INTERVAL_HOURS = 6      # 距上次做梦至少 6 小时
 MIN_NEW_ITEMS = 5           # 当天至少 5 条新记忆才值得做

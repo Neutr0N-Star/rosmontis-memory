@@ -1,30 +1,30 @@
-﻿# Alaya 快速开始（库形态）
+﻿# Rosmontis 快速开始（库形态）
 
 目标：不联网、不装模型，从零到「写下第一条记忆 → 下一轮能取回 → 正常打烊」。
 全流程只需要 Python 3.10+ 和带 FTS5 的 SQLite；服务形态（HTTP / 可视化）另见 [operations.md](operations.md)。
 
-> 对应代码：`alaya/api.py`（公共 API v1）、`alaya/harness.py`（Harness）、`examples/hooks_demo.py`（四钩子示例）。
+> 对应代码：`rosmontis/api.py`（公共 API v1）、`rosmontis/harness.py`（Harness）、`examples/hooks_demo.py`（四钩子示例）。
 > 本文示例已按当前 API 实跑验证；验证方法见文末「自检」。
 
 ## 0. 拿到代码并接入 import 路径
 
 ```bash
-git clone <repo-url> alaya-memory
-cd alaya-memory
+git clone <repo-url> rosmontis-memory
+cd rosmontis-memory
 ```
 
-当前工作树已带 `pyproject.toml`（`name="alaya-memory"`，`requires-python=">=3.10"`，核心依赖为空）。推荐本地 path 安装：
+当前工作树已带 `pyproject.toml`（`name="rosmontis-memory"`，`requires-python=">=3.10"`，核心依赖为空）。推荐本地 path 安装：
 
 ```powershell
 # Windows PowerShell（在仓库根目录）
 pip install -e .
-python -c "import alaya; print(alaya.__version__, alaya.api_version)"
+python -c "import rosmontis; print(rosmontis.__version__, rosmontis.api_version)"
 ```
 
 ```bash
 # macOS / Linux
 pip install -e .
-python -c "import alaya; print(alaya.__version__, alaya.api_version)"
+python -c "import rosmontis; print(rosmontis.__version__, rosmontis.api_version)"
 ```
 
 按需装服务/评测依赖：`pip install -e ".[serve]"`（fastapi/uvicorn/pydantic/jieba）、`pip install -e ".[dev]"`。
@@ -32,38 +32,38 @@ python -c "import alaya; print(alaya.__version__, alaya.api_version)"
 
 ```powershell
 $env:PYTHONPATH = (Resolve-Path .).Path
-python -c "import alaya; print(alaya.__version__, alaya.api_version)"
+python -c "import rosmontis; print(rosmontis.__version__, rosmontis.api_version)"
 ```
 
 ```bash
 export PYTHONPATH="$PWD"
-python -c "import alaya; print(alaya.__version__, alaya.api_version)"
+python -c "import rosmontis; print(rosmontis.__version__, rosmontis.api_version)"
 ```
 
-预期输出 `1.1.0 1`（包版本 / 公共 API 版本，见 `alaya/__init__.py:10-11`）。
+预期输出 `1.1.0 1`（包版本 / 公共 API 版本，见 `rosmontis/__init__.py:10-11`）。
 
 也可以在脚本开头直接加路径：
 
 ```python
 import sys
-sys.path.insert(0, r"D:\MyHub\06-Projects\alaya-memory")
+sys.path.insert(0, r"D:\MyHub\06-Projects\rosmontis-memory")
 ```
 
-依赖：核心库只用标准库；`numpy`、`jieba` 是可选的加速/分词增强（`alaya/core/vec.py:12-18`、`alaya/core/text.py:10-15`）；`fastapi`、`uvicorn` 只在起 HTTP 服务时需要。
+依赖：核心库只用标准库；`numpy`、`jieba` 是可选的加速/分词增强（`rosmontis/core/vec.py:12-18`、`rosmontis/core/text.py:10-15`）；`fastapi`、`uvicorn` 只在起 HTTP 服务时需要。
 
 ## 1. 三行接入
 
 ```python
-import alaya
+import rosmontis
 
-h = alaya.open("my_memory.db", {"embed_provider": "hash", "llm_hot": "rule", "llm_deep": "rule"})
+h = rosmontis.open("my_memory.db", {"embed_provider": "hash", "llm_hot": "rule", "llm_deep": "rule"})
 h.wake("u1", "c1")
 ```
 
-- `alaya.open(db_path, config)` 创建/打开一个记忆空间，返回 `Handle`（`alaya/api.py:437`）。
+- `rosmontis.open(db_path, config)` 创建/打开一个记忆空间，返回 `Handle`（`rosmontis/api.py:437`）。
 - `config` 是 `Config` 字段组成的 dict；`embed_provider="hash"` + `llm_hot="rule"` 表示完全离线、确定性运行。
-- 默认值是本地 Ollama（`alaya/config.py:151-163`）；没有 Ollama 时第一次检索会降级成哈希向量，见 [operations.md](operations.md) 的降级矩阵。
-- v1 里 `space` 就是底层 `session_id`：同一 `space` 的不同 `conversation` 共享记忆；`conversation` 原样带回，并参与 `observe` 幂等键（`alaya/api.py:26-32`）。
+- 默认值是本地 Ollama（`rosmontis/config.py:151-163`）；没有 Ollama 时第一次检索会降级成哈希向量，见 [operations.md](operations.md) 的降级矩阵。
+- v1 里 `space` 就是底层 `session_id`：同一 `space` 的不同 `conversation` 共享记忆；`conversation` 原样带回，并参与 `observe` 幂等键（`rosmontis/api.py:26-32`）。
 
 ## 2. 写下第一条记忆
 
@@ -73,13 +73,13 @@ h.wake("u1", "c1")
 import os
 import tempfile
 
-import alaya
+import rosmontis
 
-work = tempfile.mkdtemp(prefix="alaya_quickstart_")
+work = tempfile.mkdtemp(prefix="rosmontis_quickstart_")
 db = os.path.join(work, "memory.db")
 
 # 离线配置：hash 向量 + 规则抽取
-h = alaya.open(db, {
+h = rosmontis.open(db, {
     "embed_provider": "hash",
     "llm_hot": "rule",
     "llm_deep": "rule",
@@ -122,27 +122,27 @@ memory_tokens: 7 abstained: False
 settle: done ['峰终结算']
 ```
 
-- `observe` 每个非空文本各写一条 episode，返回 `queued=True`；同一 `(space, conversation, user_text, assistant_text)` 在 `observe_window`（默认 300 秒）内重复调用返回 `idempotent=True`（`alaya/api.py:210-250`）。
-- `context` 是纯函数：不写 `episode` / `retrieval_log`，且 `memory_tokens <= budget`（`alaya/harness.py:104-126,159`）。
-- `settle` 不阻塞：返回 `job_id`，后台线程跑 `close_session` + `notebook_review` + `dream`（`alaya/api.py:252-311`、`alaya/harness.py:698-726`）。
-- `wake` 返回 `persona_text / persona_chars / persona_budget / persona_items / resident_text / resident_tokens / resident_pages / inbox / degraded`（`alaya/harness.py:482-506`）。
+- `observe` 每个非空文本各写一条 episode，返回 `queued=True`；同一 `(space, conversation, user_text, assistant_text)` 在 `observe_window`（默认 300 秒）内重复调用返回 `idempotent=True`（`rosmontis/api.py:210-250`）。
+- `context` 是纯函数：不写 `episode` / `retrieval_log`，且 `memory_tokens <= budget`（`rosmontis/harness.py:104-126,159`）。
+- `settle` 不阻塞：返回 `job_id`，后台线程跑 `close_session` + `notebook_review` + `dream`（`rosmontis/api.py:252-311`、`rosmontis/harness.py:698-726`）。
+- `wake` 返回 `persona_text / persona_chars / persona_budget / persona_items / resident_text / resident_tokens / resident_pages / inbox / degraded`（`rosmontis/harness.py:482-506`）。
 
 ### 2.2 把循环交给 Harness（模型自己调工具）
 
-`alaya_remember` 等五个工具只有在模型返回 `tool_calls` 时才会触发。下面用一个假模型跑通工具链：
+`rosmontis_remember` 等五个工具只有在模型返回 `tool_calls` 时才会触发。下面用一个假模型跑通工具链：
 
 ```python
 import os
 import tempfile
 
-import alaya
+import rosmontis
 
 
 def fake_llm(messages, tools=None):
     # 第一次：调工具写笔记；第二次（工具结果已回灌）：正常收尾
     if not [m for m in messages if m.get("role") == "tool"]:
         return {"content": "", "tool_calls": [{
-            "name": "alaya_remember",
+            "name": "rosmontis_remember",
             "arguments": {
                 "what": "他最近在准备搬家",
                 "noticed": "提到房东时语气很轻",
@@ -154,9 +154,9 @@ def fake_llm(messages, tools=None):
     return {"content": "我记下了。", "tool_calls": []}
 
 
-work = tempfile.mkdtemp(prefix="alaya_turn_")
+work = tempfile.mkdtemp(prefix="rosmontis_turn_")
 db = os.path.join(work, "memory.db")
-h = alaya.open(db, {
+h = rosmontis.open(db, {
     "embed_provider": "hash", "llm_hot": "rule", "llm_deep": "rule",
     "llm_callable": fake_llm, "memory_budget": 400, "log_level": "ERROR",
 })
@@ -175,18 +175,18 @@ import shutil
 shutil.rmtree(work, ignore_errors=True)
 ```
 
-预期：`[('alaya_remember', True, 'note')]`，随后 `context` 同时命中工具笔记和用户原话。
-`turn` 的返回值还带 `usage`、`finish_reason`、`rounds`、`memory_used`（`alaya/harness.py:560-576`）。
+预期：`[('rosmontis_remember', True, 'note')]`，随后 `context` 同时命中工具笔记和用户原话。
+`turn` 的返回值还带 `usage`、`finish_reason`、`rounds`、`memory_used`（`rosmontis/harness.py:560-576`）。
 
 ## 3. 换真实模型
 
-公共 API 只认一个回调：`llm_callable(messages, tools) -> dict`。返回值里可以带 `content`、`tool_calls`、`usage`、`finish_reason`；`tool_calls` 既接受 OpenAI 原生嵌套 `function.arguments`（JSON 串），也接受扁平的 `{"name","arguments": {...}}`（`alaya/harness.py:12-21,212-265`）。
+公共 API 只认一个回调：`llm_callable(messages, tools) -> dict`。返回值里可以带 `content`、`tool_calls`、`usage`、`finish_reason`；`tool_calls` 既接受 OpenAI 原生嵌套 `function.arguments`（JSON 串），也接受扁平的 `{"name","arguments": {...}}`（`rosmontis/harness.py:12-21,212-265`）。
 
 ```python
-import alaya
-from alaya import Config
-from alaya.core.llm import LLM
-from alaya.harness import make_llm_callable
+import rosmontis
+from rosmontis import Config
+from rosmontis.core.llm import LLM
+from rosmontis.harness import make_llm_callable
 
 cfg = Config(
     embed_provider="ollama",                 # 需要本机 Ollama + bge-m3
@@ -205,7 +205,7 @@ llm = LLM(
     openai_key=cfg.openai_key,
     openai_model=cfg.openai_model,
 )
-h = alaya.open("my_memory.db", {
+h = rosmontis.open("my_memory.db", {
     "embed_provider": "ollama",
     "llm_hot": "openai",
     "llm_deep": "openai",
@@ -216,38 +216,38 @@ h = alaya.open("my_memory.db", {
 })
 ```
 
-- `make_llm_callable(llm)` 会优先走原生工具协议（OpenAI 兼容 / Ollama）；上游没有工具能力、没密钥或超时时**安静降级**为纯文本通道（`tool_calls=[]`），不抛异常（`alaya/harness.py:398-448`）。
+- `make_llm_callable(llm)` 会优先走原生工具协议（OpenAI 兼容 / Ollama）；上游没有工具能力、没密钥或超时时**安静降级**为纯文本通道（`tool_calls=[]`），不抛异常（`rosmontis/harness.py:398-448`）。
 - 因此：模型不支持 function calling 时，五个工具不会触发，但对话与被动记忆仍正常。
 - 离线但没有 bge-m3 时，`hash` 向量只适合跑通链路与测试，不适合评估语义召回。
-- 不传 `llm_callable` 时，`turn` 只会返回「（没有接模型）」，但仍会记录用户那句话（`alaya/harness.py:619-620`、`543`）。
+- 不传 `llm_callable` 时，`turn` 只会返回「（没有接模型）」，但仍会记录用户那句话（`rosmontis/harness.py:619-620`、`543`）。
 
 ## 4. 关闭与清理
 
-- `h.close()` 可重复调用；会等后台 settle 与 enrich 收尾（`alaya/api.py:357-389`）。
+- `h.close()` 可重复调用；会等后台 settle 与 enrich 收尾（`rosmontis/api.py:357-389`）。
 - 推荐用上下文管理器：
 
 ```python
-with alaya.open("my_memory.db", {"embed_provider": "hash", "llm_hot": "rule"}) as h:
+with rosmontis.open("my_memory.db", {"embed_provider": "hash", "llm_hot": "rule"}) as h:
     h.wake("u1", "c1")
     h.observe("u1", "c1", "你好", "你好呀。")
     h.settle("u1", "c1")
 ```
 
 - SQLite 是 WAL 模式，磁盘上可能出现 `my_memory.db-wal` / `my_memory.db-shm`。**不要只删主库文件**；停掉进程后三个一起清，或按 [operations.md](operations.md) 的备份/恢复流程处理。
-- 生产库第一次被 `alaya.open()` 打开时会自动执行 schema 迁移（v2 → v4，`alaya/core/db.py:77-122`）。已有 `alaya.db` 时先备份，见 [operations.md](operations.md)。
+- 生产库第一次被 `rosmontis.open()` 打开时会自动执行 schema 迁移（v2 → v4，`rosmontis/core/db.py:77-122`）。已有 `rosmontis.db` 时先备份，见 [operations.md](operations.md)。
 
 ## 5. 常见错误
 
 | 异常 / 返回 | 含义 | 处理 |
 |---|---|---|
-| `AlayaError.code == "invalid_argument"` | `space` 为空/为 `*`、`text` 为空、`budget <= 0` | 检查入参（`alaya/api.py:157-165,199-200,411-418`） |
-| `llm_unavailable`（`retryable=True`） | 模型没有返回内容 | 检查模型服务/密钥；重试或换模型（`alaya/api.py:206-207`） |
+| `RosmontisError.code == "invalid_argument"` | `space` 为空/为 `*`、`text` 为空、`budget <= 0` | 检查入参（`rosmontis/api.py:157-165,199-200,411-418`） |
+| `llm_unavailable`（`retryable=True`） | 模型没有返回内容 | 检查模型服务/密钥；重试或换模型（`rosmontis/api.py:206-207`） |
 | `not_found` | `item_state` / `job` / `wait` 查不到 id | 确认 id 来源；`job` 只在当前 Handle 生命期内有效 |
 | `timeout`（`retryable=True`） | `wait` 超时 | 增加 timeout 或改用 `job()` 轮询 |
-| `closed` | Handle 已关闭 | 重新 `alaya.open()` |
+| `closed` | Handle 已关闭 | 重新 `rosmontis.open()` |
 | `context` 返回 `abstained=True`、`memory_text=""` | 没有相关记忆，或 hash 模式词面不重合 | 换更贴近原文的查询；接 bge-m3 后再评估语义召回 |
 
-工具被闸门拒绝时不会抛异常，而是返回 `{"ok": False, "reason": "..."}`，模型可读（`alaya/tools.py:157-174`）。
+工具被闸门拒绝时不会抛异常，而是返回 `{"ok": False, "reason": "..."}`，模型可读（`rosmontis/tools.py:157-174`）。
 
 ## 6. 自检
 
@@ -255,7 +255,7 @@ with alaya.open("my_memory.db", {"embed_provider": "hash", "llm_hot": "rule"}) a
 # 1) 四钩子示例（临时库，不联网）
 python examples/hooks_demo.py
 
-# 2) 全量测试（全部测试文件共 184 项；全部用临时库，不写 alaya.db）
+# 2) 全量测试（全部测试文件共 184 项；全部用临时库，不写 rosmontis.db）
 python -m unittest discover -s tests -p "test_*.py"
 ```
 

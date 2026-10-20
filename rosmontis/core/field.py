@@ -22,7 +22,7 @@ docs/15 §3.2 的 WS-B 接口实现。数据访问全在这里，动力学在 me
 - 任何一路失败都不拖垮其它路（向量服务挂了仍有 FTS+实体点火）；
 - 空种子返回空激活图，由 recall 走现有拒答；
 - 迭代次数硬上限 `MAX_HOPS=3`，邻接按前沿增量加载并设边数上限，防环防爆；
-- `ALAYA_FIELD=0` 可整路关闭语义场（A/B 与回退用）。
+- `ROSMONTIS_FIELD=0` 可整路关闭语义场（A/B 与回退用）。
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ from . import memory_field as MF
 from . import text as TX
 from . import vec as V
 
-log = logging.getLogger("alaya.field")
+log = logging.getLogger("rosmontis.field")
 
 MAX_ITERATIONS = MF.MAX_HOPS          # 迭代硬上限 3
 MAX_SEEDS = 96                         # 种子集上限，防止一次点火打爆
@@ -127,8 +127,8 @@ def _resolve(cfg, embedder=None):
 
 
 def enabled() -> bool:
-    """语义场总开关。`ALAYA_FIELD=0/false/off/no` 关闭（其余一律开启）。"""
-    v = os.environ.get("ALAYA_FIELD", "1")
+    """语义场总开关。`ROSMONTIS_FIELD=0/false/off/no` 关闭（其余一律开启）。"""
+    v = os.environ.get("ROSMONTIS_FIELD", "1")
     return str(v).strip().lower() not in ("0", "false", "off", "no")
 
 
@@ -282,7 +282,10 @@ def _entity_seeds(cfg, query: str, sid: str, as_of: float) -> list[tuple[str, fl
     toks = TX.tokenize(query)
     if not toks:
         return []
-    ltok = [t.lower() for t in toks][:8]
+    # 不截断 token 数量：长句里的实体可能落在第 9 个 token 之后，截断会让整句
+    # 的实体点火哑火（33 token 的句子里「字节跳动」在第 12 位 → entity_seeds=[]）。
+    ltok = list(dict.fromkeys(t.lower() for t in toks))
+    qlow = (query or "").strip().lower()
     out: list[tuple[str, float]] = []
     try:
         with DB.reader(cfg.db_path) as conn:
@@ -299,6 +302,20 @@ def _entity_seeds(cfg, query: str, sid: str, as_of: float) -> list[tuple[str, fl
                     ORDER BY salience DESC, mentions DESC LIMIT 16""",
                 (sid, sid, *ltok, *[t + "%" for t in ltok]),
             ).fetchall()
+            if not rows and qlow:
+                # 兜底：精确/前缀一个都没点着时，退回整句子串匹配。它走不到索引，
+                # 但只在零命中时跑；去掉 instr 是为了性能，召回面不能跟着变窄——
+                # 实体名可能是跨 token 的片段（"北京大学的城东校区"）。
+                # 这里按需拼 session 条件，不用「哨兵 session 过滤」那种写法：
+                # 哨兵会让 SQLite 放弃索引，也会被门禁的棘轮计数记一笔。
+                sid_sql = "" if sid == "*" else " AND session_id=?"
+                sid_args: tuple = () if sid == "*" else (sid,)
+                rows = conn.execute(
+                    f"""SELECT id, name, norm_name, salience FROM entity
+                        WHERE length(norm_name)>=2 AND ? LIKE '%'||norm_name||'%'{sid_sql}
+                        ORDER BY salience DESC, mentions DESC LIMIT 16""",
+                    (qlow, *sid_args),
+                ).fetchall()
             ent_ids: list[str] = []
             for r in rows:
                 ent_ids.append(r["id"])

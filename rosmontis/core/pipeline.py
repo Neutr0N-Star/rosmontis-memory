@@ -30,7 +30,7 @@ from . import gate
 from . import ids as IDS
 from . import item as IT
 
-log = logging.getLogger("alaya.pipeline")
+log = logging.getLogger("rosmontis.pipeline")
 
 # ── 进程内上下文（契约签名不带 cfg，靠 bind）──────────────────
 _ctx_lock = threading.Lock()
@@ -153,7 +153,7 @@ def _get_pool() -> ThreadPoolExecutor:
     global _pool
     with _pool_lock:
         if _pool is None:
-            _pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="alaya-enrich")
+            _pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="rosmontis-enrich")
         return _pool
 
 

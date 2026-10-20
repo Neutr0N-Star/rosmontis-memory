@@ -1,7 +1,7 @@
-"""D1 上线修复验收：无模型不写脏记忆 + 迁移守卫/备份/dry-run + ALAYA_HOME。
+"""D1 上线修复验收：无模型不写脏记忆 + 迁移守卫/备份/dry-run + ROSMONTIS_HOME。
 
 运行：`PYTHONIOENCODING=utf-8 python tests/test_launch_fixes.py`
-全部临时库；不联网、不写 alaya.db。
+全部临时库；不联网、不写 rosmontis.db。
 """
 
 from __future__ import annotations
@@ -18,16 +18,16 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-import alaya  # noqa: E402
-from alaya import Config  # noqa: E402
-from alaya.api import AlayaError  # noqa: E402
-from alaya.core import db as DB  # noqa: E402
-from alaya.harness import Harness, LLMUnavailableError  # noqa: E402
+import rosmontis  # noqa: E402
+from rosmontis import Config  # noqa: E402
+from rosmontis.api import RosmontisError  # noqa: E402
+from rosmontis.core import db as DB  # noqa: E402
+from rosmontis.harness import Harness, LLMUnavailableError  # noqa: E402
 
 
 # ── 公共 fixture ──────────────────────────────────────────────
 def mk_cfg(tag: str) -> tuple[Config, str]:
-    d = tempfile.mkdtemp(prefix=f"alaya_d1_{tag}_")
+    d = tempfile.mkdtemp(prefix=f"rosmontis_d1_{tag}_")
     cfg = Config(
         db_path=os.path.join(d, "t.db"),
         embed_provider="hash",
@@ -117,15 +117,15 @@ class TestNoModelNoDirtyMemory(unittest.TestCase):
         finally:
             teardown(cfg, d)
 
-    def test_handle_turn_raises_alaya_error_code_and_retryable(self):
-        d = tempfile.mkdtemp(prefix="alaya_d1_handle_")
+    def test_handle_turn_raises_rosmontis_error_code_and_retryable(self):
+        d = tempfile.mkdtemp(prefix="rosmontis_d1_handle_")
         db_path = os.path.join(d, "t.db")
-        h = alaya.open(
+        h = rosmontis.open(
             db_path,
             {"embed_provider": "hash", "llm_hot": "rule", "llm_deep": "rule", "log_level": "ERROR"},
         )
         try:
-            with self.assertRaises(AlayaError) as ctx:
+            with self.assertRaises(RosmontisError) as ctx:
                 h.turn("u1", "c1", "今天加班到很晚")
             err = ctx.exception
             self.assertEqual(err.code, "llm_unavailable")
@@ -181,7 +181,7 @@ class TestNoModelNoDirtyMemory(unittest.TestCase):
 # ── P1-3：迁移守卫 / 自动备份 / dry-run ────────────────────────
 class TestMigrationGuards(unittest.TestCase):
     def setUp(self):
-        self.dir = tempfile.mkdtemp(prefix="alaya_d1_mig_")
+        self.dir = tempfile.mkdtemp(prefix="rosmontis_d1_mig_")
         self.path = os.path.join(self.dir, "t.db")
 
     def tearDown(self):
@@ -199,8 +199,8 @@ class TestMigrationGuards(unittest.TestCase):
         conn.close()
         with self.assertRaises(DB.SchemaVersionError):
             DB.init_db(self.path)
-        with self.assertRaises(AlayaError) as ctx:
-            alaya.open(self.path, {"embed_provider": "hash"})
+        with self.assertRaises(RosmontisError) as ctx:
+            rosmontis.open(self.path, {"embed_provider": "hash"})
         self.assertEqual(ctx.exception.code, "schema_too_new")
         self.assertFalse(ctx.exception.retryable)
 
@@ -243,8 +243,8 @@ class TestMigrationGuards(unittest.TestCase):
             self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 3)
         finally:
             conn.close()
-        with self.assertRaises(AlayaError) as ctx:
-            alaya.open(self.path, {"embed_provider": "hash"}, migrate="never")
+        with self.assertRaises(RosmontisError) as ctx:
+            rosmontis.open(self.path, {"embed_provider": "hash"}, migrate="never")
         self.assertEqual(ctx.exception.code, "migration_required")
         self.assertFalse(ctx.exception.retryable)
 
@@ -258,7 +258,7 @@ class TestMigrationGuards(unittest.TestCase):
         self.assertTrue(any("backup:" in a for a in plan["actions"]))
         self.assertTrue(any("migrate v3" in a for a in plan["actions"]))
 
-        plan2 = alaya.open(self.path, {"embed_provider": "hash"}, migrate="dry_run")
+        plan2 = rosmontis.open(self.path, {"embed_provider": "hash"}, migrate="dry_run")
         self.assertEqual(plan2["current_version"], 3)
         self.assertEqual(plan2["target_version"], DB.SCHEMA_VERSION)
         self.assertTrue(plan2["dry_run"])
@@ -281,7 +281,7 @@ class TestMigrationGuards(unittest.TestCase):
     def test_never_allows_already_current_schema(self):
         DB.init_db(self.path)  # 先建到当前版本
         DB.close_thread_conns()
-        h = alaya.open(
+        h = rosmontis.open(
             self.path,
             {"embed_provider": "hash", "llm_hot": "rule", "llm_deep": "rule", "log_level": "ERROR"},
             migrate="never",
@@ -299,16 +299,16 @@ class TestMigrationGuards(unittest.TestCase):
         self.assertFalse(plan["will_backup"])
 
 
-# ── P1-1：ALAYA_HOME 派生 ─────────────────────────────────────
-class TestAlayaHome(unittest.TestCase):
+# ── P1-1：ROSMONTIS_HOME 派生 ─────────────────────────────────────
+class TestRosmontisHome(unittest.TestCase):
     def setUp(self):
-        self.home = tempfile.mkdtemp(prefix="alaya_home_")
+        self.home = tempfile.mkdtemp(prefix="rosmontis_home_")
         self._saved = {k: os.environ.get(k) for k in (
-            "ALAYA_HOME", "ALAYA_DB", "ALAYA_MODEL_DIR", "ALAYA_TOKEN_FILE", "ALAYA_ENV_FILE",
+            "ROSMONTIS_HOME", "ROSMONTIS_DB", "ROSMONTIS_MODEL_DIR", "ROSMONTIS_TOKEN_FILE", "ROSMONTIS_ENV_FILE",
         )}
         for k in self._saved:
             os.environ.pop(k, None)
-        os.environ["ALAYA_HOME"] = self.home
+        os.environ["ROSMONTIS_HOME"] = self.home
 
     def tearDown(self):
         for k, v in self._saved.items():
@@ -322,30 +322,30 @@ class TestAlayaHome(unittest.TestCase):
         home = Path(self.home)
         self.assertEqual(Config.home_dir(), home)
         cfg = Config()
-        self.assertEqual(Path(cfg.db_path), home / "alaya.db")
+        self.assertEqual(Path(cfg.db_path), home / "rosmontis.db")
         self.assertEqual(Config.models_dir(), home / "models")
         self.assertEqual(Config.token_file(), home / "token")
         self.assertEqual(Config.env_file(), home / ".env")
 
     def test_env_file_prefers_existing_home_env(self):
         home = Path(self.home)
-        (home / ".env").write_text("ALAYA_TEST_MARK=home\n", encoding="utf-8")
+        (home / ".env").write_text("ROSMONTIS_TEST_MARK=home\n", encoding="utf-8")
         self.assertEqual(Config.env_file(), home / ".env")
-        os.environ["ALAYA_ENV_FILE"] = str(home / "custom.env")
+        os.environ["ROSMONTIS_ENV_FILE"] = str(home / "custom.env")
         self.assertEqual(Config.env_file(), home / "custom.env")
 
     def test_explicit_env_overrides(self):
-        os.environ["ALAYA_DB"] = os.path.join(self.home, "custom.db")
-        os.environ["ALAYA_MODEL_DIR"] = os.path.join(self.home, "m2")
-        os.environ["ALAYA_TOKEN_FILE"] = os.path.join(self.home, "t2")
+        os.environ["ROSMONTIS_DB"] = os.path.join(self.home, "custom.db")
+        os.environ["ROSMONTIS_MODEL_DIR"] = os.path.join(self.home, "m2")
+        os.environ["ROSMONTIS_TOKEN_FILE"] = os.path.join(self.home, "t2")
         cfg = Config()
         self.assertEqual(cfg.db_path, os.path.join(self.home, "custom.db"))
         self.assertEqual(Config.models_dir(), Path(self.home) / "m2")
         self.assertEqual(Config.token_file(), Path(self.home) / "t2")
 
     def test_home_expands_user(self):
-        os.environ["ALAYA_HOME"] = "~/.alaya_test_d1"
-        self.assertEqual(Config.home_dir(), Path.home() / ".alaya_test_d1")
+        os.environ["ROSMONTIS_HOME"] = "~/.rosmontis_test_d1"
+        self.assertEqual(Config.home_dir(), Path.home() / ".rosmontis_test_d1")
 
 
 if __name__ == "__main__":

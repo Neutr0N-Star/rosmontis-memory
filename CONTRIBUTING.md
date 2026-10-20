@@ -4,7 +4,7 @@
 
 ```bash
 git clone <repo>
-cd alaya-memory
+cd rosmontis-memory
 python -m venv .venv
 .venv\Scripts\activate            # Windows；POSIX 用 source .venv/bin/activate
 pip install -e ".[dev]"
@@ -35,4 +35,4 @@ python examples/hooks_demo.py                            # 端到端示例可跑
 
 ## 报告问题
 
-安全漏洞走 `SECURITY.md`；其他问题请附最小复现与版本号（`alaya --version`）。
+安全漏洞走 `SECURITY.md`；其他问题请附最小复现与版本号（`rosmontis --version`）。

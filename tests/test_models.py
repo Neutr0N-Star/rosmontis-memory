@@ -20,7 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from alaya import models as M  # noqa: E402
+from rosmontis import models as M  # noqa: E402
 
 
 class _Handler(http.server.BaseHTTPRequestHandler):
@@ -86,7 +86,7 @@ class ModelCase(unittest.TestCase):
         cls.srv.server_close()
 
     def setUp(self):
-        self.d = tempfile.mkdtemp(prefix="alaya_models_")
+        self.d = tempfile.mkdtemp(prefix="rosmontis_models_")
         self.addCleanup(shutil.rmtree, self.d, True)
         _Handler.fail_times = {}
         _Handler.hits = {}

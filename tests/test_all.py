@@ -17,12 +17,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from alaya import Config  # noqa: E402
-from alaya.core import persona as PER  # noqa: E402
-from alaya.core import promotion as PR  # noqa: E402
-from alaya.core import text as TX  # noqa: E402
-from alaya.core import timeparse  # noqa: E402
-from alaya.core.memory import Memory  # noqa: E402
+from rosmontis import Config  # noqa: E402
+from rosmontis.core import persona as PER  # noqa: E402
+from rosmontis.core import promotion as PR  # noqa: E402
+from rosmontis.core import text as TX  # noqa: E402
+from rosmontis.core import timeparse  # noqa: E402
+from rosmontis.core.memory import Memory  # noqa: E402
 
 
 class FakeLLM:
@@ -53,7 +53,7 @@ class FakeLLM:
 
 
 def mk(tag: str) -> tuple[Memory, FakeLLM, str]:
-    d = tempfile.mkdtemp(prefix=f"alaya_{tag}_")
+    d = tempfile.mkdtemp(prefix=f"rosmontis_{tag}_")
     cfg = Config(
         db_path=os.path.join(d, "t.db"),
         embed_provider="hash",
@@ -330,7 +330,7 @@ class TestHelpers(unittest.TestCase):
         self.assertIsNone(timeparse.parse("随便说说", now), "解析不出就该返回 None，不能猜")
 
     def test_tokens(self):
-        from alaya.core.score import estimate_tokens
+        from rosmontis.core.score import estimate_tokens
 
         self.assertGreater(estimate_tokens("你好世界"), 0)
         self.assertLess(estimate_tokens("短"), estimate_tokens("这是一段比较长的话，用来验证估算是否单调"))

@@ -48,7 +48,7 @@ def grid_configs() -> list[C.EvalConfig]:
     return [
         C.EvalConfig("baseline_uniform", note="统一档基线：场开、D=0.45、2 轮扩散、30/30/18、预算 1400", **base),
         C.EvalConfig("field_off", field="off", gamma=0.45, hops=2, dense_k=30, sparse_k=30, graph_k=18,
-                     budget=1400, uniform_depth=True, note="关语义场（ALAYA_FIELD=0），其余同基线"),
+                     budget=1400, uniform_depth=True, note="关语义场（ROSMONTIS_FIELD=0），其余同基线"),
         C.EvalConfig("D_low", field="on", gamma=0.25, hops=2, dense_k=30, sparse_k=30, graph_k=18,
                      budget=1400, uniform_depth=True, note="扩散强度 D=0.25"),
         C.EvalConfig("D_high", field="on", gamma=0.70, hops=2, dense_k=30, sparse_k=30, graph_k=18,
@@ -165,7 +165,7 @@ def md_table(headers: list[str], rows: list[list[str]]) -> str:
 
 def dimension_sensitivity(metrics_by_name: dict[str, dict], baseline: str = "baseline_uniform") -> list[dict]:
     groups = {
-        "场开关（ALAYA_FIELD）": ["field_off"],
+        "场开关（ROSMONTIS_FIELD）": ["field_off"],
         "扩散强度 D": ["D_low", "D_high"],
         "扩散迭代次数": ["hops_1", "hops_3"],
         "检索深度 k": ["depth_shallow", "depth_deep"],
@@ -282,9 +282,9 @@ def _meta_block(ctx: dict) -> str:
         f"- 运行环境：Python {env['python']} · numpy {env['numpy'] or '缺失（纯 Python 兜底）'} · "
         f"jieba {'有' if env['jieba'] else '缺失（字符二元组分词）'} · embedding `{ctx['embed']}`。",
         f"- 抽取后端：`{ctx['extraction_backend']}`（{ctx['extraction_note']}）。",
-        f"- 语义场：`ALAYA_FIELD` 原生开关 = {fm['native_switch']}，recall 已接场 = {fm['recall_uses_field']}；"
+        f"- 语义场：`ROSMONTIS_FIELD` 原生开关 = {fm['native_switch']}，recall 已接场 = {fm['recall_uses_field']}；"
         f"D 走 `{fm['decay_source']}`，迭代次数走 `{fm['iterations_source']}`。",
-        f"- 代码指纹：git `{str(code.get('git_head') or '?')[:12]}`，工作区 `alaya/` 未提交改动 "
+        f"- 代码指纹：git `{str(code.get('git_head') or '?')[:12]}`，工作区 `rosmontis/` 未提交改动 "
         f"{len(code.get('dirty_core_files') or [])} 个（核心施工期，集成完成后应用同一命令重跑刷新数字）。",
         f"- 生成时间：{ctx['run_at']}；DB 构建 {ctx['build_elapsed_s']}s（{ds['db_build_line']}）。",
     ]
@@ -528,7 +528,7 @@ def _limitations_block(ctx: dict) -> str:
     return f"""\
 1. **合成数据的边界**：对话与金标均由模板生成，句式和实体池有限，分布比真实对话窄；金标是程序化标注，与 docs/15 §2.1 要求的「人工 golden set 200 段」不等价。它能验证管线可测、可复现与相对排序，不能替代真实标注集。
 2. **离线降级显著影响数字**：本机无 Ollama/无 jieba，embedding 走哈希伪向量且核心在降级时不落库向量，稠密路实际退化；分词退化为字符二元组。因此「拒答误召率」偏高主要来自 FTS 把「为什么/怎么/什么」这类问题词当关键词命中（详见下文与阈值扫描），有真语义向量后应重跑。
-3. **核心仍在施工**：评测时 `alaya/` 有 {len(code.get('dirty_core_files') or [])} 个未提交改动（{', '.join(code.get('dirty_core_files') or []) or '无'}）。集成完成后必须用同一命令重跑，数字以重跑结果为准。
+3. **核心仍在施工**：评测时 `rosmontis/` 有 {len(code.get('dirty_core_files') or [])} 个未提交改动（{', '.join(code.get('dirty_core_files') or []) or '无'}）。集成完成后必须用同一命令重跑，数字以重跑结果为准。
 4. **延迟是单机测量**：绝对值受机器负载影响，跨机器不可比；只用于同机横向比较。p95 基于每题 {ctx['repeats']} 次重复的均值。
 5. **场参数映射**：当前 D 走 `memory_field.DEFAULT_GAMMA`，迭代次数走 `REFLEX_DEPTH[*].hops`；若 WS-B 把扩散参数改为 cfg 字段，`bench/common.py` 的 `applied_config()` 是唯一需要改的地方（报告与脚本无需变化）。
 6. **不评价生成质量**：基准没有答案文本生成环节，多跳/比较类题判定的是「可作答证据是否齐备」，不是最终自然语言回答的正确性。
@@ -542,7 +542,7 @@ def build_report(ctx: dict) -> str:
     fc = ctx["field_comparison"]
     base = mbn["baseline_uniform"]
     return f"""\
-# 藏识 Alaya · 质量基准与帕累托报告
+# 藏识 Rosmontis · 质量基准与帕累托报告
 
 > 本文件由 `bench/pareto.py` 自动生成，**所有数字来自同一次脚本运行**；手工改动会被下次运行覆盖。
 > 复现：`{ds['commands']['pareto']}`（数据集另可用 `{ds['commands']['generate']}` 重生成，种子固定）。
@@ -593,7 +593,7 @@ p95 延迟 {rec['p95_delta_pct'] * 100:+.1f}%，平均注入 token {rec['tokens_
 
 支配判定按 docs/15 §2.2：7 项质量指标全不劣、3 项成本全不劣且至少一项严格更优。前沿之外的配置都能被前沿里某组支配。
 
-## 6. 场地基对比（ALAYA_FIELD on/off）
+## 6. 场地基对比（ROSMONTIS_FIELD on/off）
 
 {_field_block(ctx)}
 
@@ -703,15 +703,15 @@ python bench/pareto.py                  # 生成 report + 本文件
 
 1. 合成数据 + 程序化金标，与人工标注 golden set 不等价；数字用于相对比较与回归，不用于对外对标。
 2. 本机无 Ollama/jieba：hash 伪向量 + 字符二元组分词导致稠密路退化，拒答误召偏高；接真模型后需重跑。
-3. 核心施工期（`alaya/` 有 {len(ctx['code'].get('dirty_core_files') or [])} 个未提交改动），集成完成后以同一命令重跑结果为准。
+3. 核心施工期（`rosmontis/` 有 {len(ctx['code'].get('dirty_core_files') or [])} 个未提交改动），集成完成后以同一命令重跑结果为准。
 4. 延迟为单机测量，跨机器不可比。
 """
 
 
 # ── 主流程 ────────────────────────────────────────────────────
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    ap = argparse.ArgumentParser(description="alaya-memory 帕累托评测")
-    ap.add_argument("--field", choices=["on", "off"], default=None, help="参考配置的场开关（默认读 ALAYA_FIELD）")
+    ap = argparse.ArgumentParser(description="rosmontis-memory 帕累托评测")
+    ap.add_argument("--field", choices=["on", "off"], default=None, help="参考配置的场开关（默认读 ROSMONTIS_FIELD）")
     ap.add_argument("--budget", type=int, default=1400, help="产品默认参考配置的预算")
     ap.add_argument("--repeats", type=int, default=2, help="每题重复检索次数（延迟取均值，默认 2）")
     ap.add_argument("--max-questions", type=int, default=0, help="冒烟用：只跑前 N 题（0=全部，题目顺序按会话/类别）")
@@ -728,7 +728,7 @@ def main(argv: list[str] | None = None) -> int:
     data = C.load_dataset()
     fingerprint = C.dataset_fingerprint()
     field = args.field or (
-        "off" if str(os.environ.get("ALAYA_FIELD", "on")).strip().lower() in ("0", "false", "off", "no") else "on"
+        "off" if str(os.environ.get("ROSMONTIS_FIELD", "on")).strip().lower() in ("0", "false", "off", "no") else "on"
     )
     if args.max_questions:
         data = dict(data)
@@ -784,7 +784,7 @@ def main(argv: list[str] | None = None) -> int:
         frontier_extended = frontier_names(extended_pool)
 
         label_of: dict[str, tuple[str, str]] = {
-            "field_off": ("场开关 ALAYA_FIELD", "off"),
+            "field_off": ("场开关 ROSMONTIS_FIELD", "off"),
             "D_low": ("扩散强度 D", "0.25"),
             "D_high": ("扩散强度 D", "0.70"),
             "hops_1": ("扩散迭代次数", "1"),

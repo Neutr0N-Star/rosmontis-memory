@@ -13,7 +13,7 @@
 | 位置 | 字段 |
 |---|---|
 | `pyproject.toml` | `[project] version` |
-| `alaya/__init__.py` | `__version__` |
+| `rosmontis/__init__.py` | `__version__` |
 | `README.md` | 如出现版本号处 |
 
 `api_version`（对外接口版本）只有**破坏性改动**时才升；它和包版本不是一回事。
@@ -38,14 +38,14 @@ python bench/run_eval.py                                  # 质量数字
 ```bash
 rm -rf dist build *.egg-info
 python -m pip wheel . -w dist --no-deps
-# 检查产物：必须含 alaya/schema.sql，不许含 web/ tests/ alaya.db
-python -m zipfile -l dist/alaya_memory-*.whl
+# 检查产物：必须含 rosmontis/schema.sql，不许含 web/ tests/ rosmontis.db
+python -m zipfile -l dist/rosmontis_memory-*.whl
 
-python -m venv %TEMP%\alaya_verify
-%TEMP%\alaya_verify\Scripts\pip install dist\alaya_memory-*.whl[serve]
-%TEMP%\alaya_verify\Scripts\python -c "import alaya; print(alaya.__version__)"
-%TEMP%\alaya_verify\Scripts\alaya --version
-%TEMP%\alaya_verify\Scripts\alaya serve --port 8878     # 另开窗口 curl /healthz /readyz
+python -m venv %TEMP%\rosmontis_verify
+%TEMP%\rosmontis_verify\Scripts\pip install dist\rosmontis_memory-*.whl[serve]
+%TEMP%\rosmontis_verify\Scripts\python -c "import rosmontis; print(rosmontis.__version__)"
+%TEMP%\rosmontis_verify\Scripts\rosmontis --version
+%TEMP%\rosmontis_verify\Scripts\rosmontis serve --port 8878     # 另开窗口 curl /healthz /readyz
 ```
 
 ## 5 打 tag 与发布说明

@@ -23,35 +23,35 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from .. import __version__ as _ALAYA_VERSION
+from .. import __version__ as _ROSMONTIS_VERSION
 from ..config import Config
 from ..core import jobs
 from ..core.memory import Memory
 from ..tools import item_state as _item_state
 from ..tools import transition_item
 
-log = logging.getLogger("alaya.service")
+log = logging.getLogger("rosmontis.service")
 
 _mem: Memory | None = None
 _harness = None
 
 # ── 本地 token 鉴权（P0-4）────────────────────────────────────
-# 路径先按 ALAYA_HOME / ~/.alaya 计算；等 D1 的 Config.home_dir() 落地后替换这里。
+# 路径先按 ROSMONTIS_HOME / ~/.rosmontis 计算；等 D1 的 Config.home_dir() 落地后替换这里。
 TOKEN_FILENAME = "token"
 SECURITY_EXEMPT_PATHS = frozenset({"/healthz", "/readyz", "/openapi.json", "/docs", "/redoc"})
 _CONFIRM_VALUES = frozenset({"yes", "1", "true", "y"})
 
 
-def alaya_home_dir() -> Path:
-    """本地数据目录：显式 ALAYA_HOME 优先，否则 ~/.alaya。"""
-    raw = (os.environ.get("ALAYA_HOME") or "").strip()
+def rosmontis_home_dir() -> Path:
+    """本地数据目录：显式 ROSMONTIS_HOME 优先，否则 ~/.rosmontis。"""
+    raw = (os.environ.get("ROSMONTIS_HOME") or "").strip()
     if raw:
         return Path(raw).expanduser()
-    return Path.home() / ".alaya"
+    return Path.home() / ".rosmontis"
 
 
 def token_path() -> Path:
-    return alaya_home_dir() / TOKEN_FILENAME
+    return rosmontis_home_dir() / TOKEN_FILENAME
 
 
 def _chmod_private(path: Path) -> None:
@@ -93,8 +93,8 @@ def ensure_local_token(path: Path | None = None) -> str:
 
 
 def configured_token() -> str | None:
-    """显式 ALAYA_TOKEN 优先；否则读本地 token 文件（不存在返回 None）。"""
-    raw = (os.environ.get("ALAYA_TOKEN") or "").strip()
+    """显式 ROSMONTIS_TOKEN 优先；否则读本地 token 文件（不存在返回 None）。"""
+    raw = (os.environ.get("ROSMONTIS_TOKEN") or "").strip()
     if raw:
         return raw
     try:
@@ -137,8 +137,8 @@ _job_threads_lock = threading.Lock()
 
 
 def _write_shutdown_marker(payload: dict) -> None:
-    """测试/运维用：设置 ALAYA_SHUTDOWN_MARKER 后，优雅关停时落标记文件。"""
-    path = (os.environ.get("ALAYA_SHUTDOWN_MARKER") or "").strip()
+    """测试/运维用：设置 ROSMONTIS_SHUTDOWN_MARKER 后，优雅关停时落标记文件。"""
+    path = (os.environ.get("ROSMONTIS_SHUTDOWN_MARKER") or "").strip()
     if not path:
         return
     try:
@@ -172,7 +172,7 @@ def _start_job_thread(job_id: str, mem: Memory) -> threading.Thread:
             with _job_threads_lock:
                 _job_threads.discard(threading.current_thread())
 
-    t = threading.Thread(target=_worker, daemon=True, name=f"alaya-job-{job_id[:8]}")
+    t = threading.Thread(target=_worker, daemon=True, name=f"rosmontis-job-{job_id[:8]}")
     with _job_threads_lock:
         _job_threads.add(t)
     t.start()
@@ -227,7 +227,7 @@ def _write_env_file(patch: dict) -> None:
             d.pop(k, None)
         else:
             d[k] = str(v)
-    lines = ["# 藏识 Alaya 本地配置（自动生成，密钥不要提交）"]
+    lines = ["# 藏识 Rosmontis 本地配置（自动生成，密钥不要提交）"]
     for k in sorted(d):
         lines.append(f"{k}={d[k]}")
     _ENV_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -243,8 +243,8 @@ def _reload_runtime():
     _mem = None
     _harness = None
     for k in (
-        "ALAYA_LLM_HOT", "ALAYA_LLM_DEEP", "ALAYA_LLM_HOT_MODEL", "ALAYA_LLM_DEEP_MODEL",
-        "ALAYA_OPENAI_BASE", "ALAYA_OPENAI_KEY", "ALAYA_OPENAI_MODEL", "ALAYA_LLM_TEMP",
+        "ROSMONTIS_LLM_HOT", "ROSMONTIS_LLM_DEEP", "ROSMONTIS_LLM_HOT_MODEL", "ROSMONTIS_LLM_DEEP_MODEL",
+        "ROSMONTIS_OPENAI_BASE", "ROSMONTIS_OPENAI_KEY", "ROSMONTIS_OPENAI_MODEL", "ROSMONTIS_LLM_TEMP",
     ):
         os.environ.pop(k, None)
     for k, v in _read_env_file().items():
@@ -435,14 +435,14 @@ def create_app() -> FastAPI:
         )
 
     app = FastAPI(
-        title="藏识 Alaya",
-        version=_ALAYA_VERSION,
+        title="藏识 Rosmontis",
+        version=_ROSMONTIS_VERSION,
         description="长期陪伴 AI 的记忆器官：五层记忆 + 三轴 + 预算约束检索",
         lifespan=_lifespan,
     )
     # CORS：默认只放行本机常见前端端口；file:// 的 `Origin: null` 不再默认放行，
-    # 需要它的用户显式配置 ALAYA_CORS_ORIGINS=null（P0-4）。
-    _cors_env = (os.environ.get("ALAYA_CORS_ORIGINS") or "").strip()
+    # 需要它的用户显式配置 ROSMONTIS_CORS_ORIGINS=null（P0-4）。
+    _cors_env = (os.environ.get("ROSMONTIS_CORS_ORIGINS") or "").strip()
     if _cors_env:
         _cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
     else:
@@ -906,14 +906,14 @@ def create_app() -> FastAPI:
             )
         patch = {}
         for env_key, val in (
-            ("ALAYA_LLM_HOT", body.llm_hot),
-            ("ALAYA_LLM_DEEP", body.llm_deep),
-            ("ALAYA_LLM_HOT_MODEL", body.llm_hot_model),
-            ("ALAYA_LLM_DEEP_MODEL", body.llm_deep_model),
-            ("ALAYA_OPENAI_BASE", body.openai_base),
-            ("ALAYA_OPENAI_KEY", body.openai_key),
-            ("ALAYA_OPENAI_MODEL", body.openai_model),
-            ("ALAYA_LLM_TEMP", body.temperature),
+            ("ROSMONTIS_LLM_HOT", body.llm_hot),
+            ("ROSMONTIS_LLM_DEEP", body.llm_deep),
+            ("ROSMONTIS_LLM_HOT_MODEL", body.llm_hot_model),
+            ("ROSMONTIS_LLM_DEEP_MODEL", body.llm_deep_model),
+            ("ROSMONTIS_OPENAI_BASE", body.openai_base),
+            ("ROSMONTIS_OPENAI_KEY", body.openai_key),
+            ("ROSMONTIS_OPENAI_MODEL", body.openai_model),
+            ("ROSMONTIS_LLM_TEMP", body.temperature),
         ):
             if val is not None:
                 patch[env_key] = val
@@ -1083,7 +1083,7 @@ def create_app() -> FastAPI:
     # ── 服务信息（前端不在产品内：web/ 挂载与 /debug 已移除）────
     @app.get("/", include_in_schema=False)
     def index():
-        return JSONResponse({"ok": True, "data": {"service": "alaya", "docs": "/docs"}})
+        return JSONResponse({"ok": True, "data": {"service": "rosmontis", "docs": "/docs"}})
 
     @app.get("/health", include_in_schema=False)
     def health():
@@ -1127,7 +1127,7 @@ def create_app() -> FastAPI:
             }
         except Exception as e:
             checks["providers"] = {"ok": False, "error": type(e).__name__}
-        body = {"ok": ok, "data": {"version": _ALAYA_VERSION, "checks": checks}}
+        body = {"ok": ok, "data": {"version": _ROSMONTIS_VERSION, "checks": checks}}
         return JSONResponse(body, status_code=200 if ok else 503)
 
     return app

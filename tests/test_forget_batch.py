@@ -6,7 +6,7 @@
 然后比对归档集合、folded_into、摘要行、state 投影与 item_state_log 指纹。
 
 运行：`PYTHONIOENCODING=utf-8 python tests/test_forget_batch.py`
-不依赖 Ollama / 网络；只用临时库，不碰 alaya.db。
+不依赖 Ollama / 网络；只用临时库，不碰 rosmontis.db。
 """
 
 from __future__ import annotations
@@ -23,13 +23,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from alaya import Config  # noqa: E402
-from alaya.core import db as DB  # noqa: E402
-from alaya.core import forget as FG  # noqa: E402
-from alaya.core import ids as IDS  # noqa: E402
-from alaya.core import item as IT  # noqa: E402
-from alaya.core import memory_field as MF  # noqa: E402
-from alaya.core import pipeline as TR  # noqa: E402
+from rosmontis import Config  # noqa: E402
+from rosmontis.core import db as DB  # noqa: E402
+from rosmontis.core import forget as FG  # noqa: E402
+from rosmontis.core import ids as IDS  # noqa: E402
+from rosmontis.core import item as IT  # noqa: E402
+from rosmontis.core import memory_field as MF  # noqa: E402
+from rosmontis.core import pipeline as TR  # noqa: E402
 
 NOW = 1_792_368_000.0          # 与 bench/_profile 固定时钟一致
 OLD = NOW - 86400 * 365 * 3    # 3 年前 → retention ≈ 0，必然 cold
@@ -283,7 +283,7 @@ def summary_rows(cfg: Config):
 class ForgeBatchBase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.tmp = tempfile.mkdtemp(prefix="alaya_forget_batch_")
+        cls.tmp = tempfile.mkdtemp(prefix="rosmontis_forget_batch_")
         cls.template = os.path.join(cls.tmp, "template.db")
         build_fixture(cls.template)
 
@@ -469,7 +469,7 @@ class TestQueryCount(ForgeBatchBase):
 # ── 6 批量入口与逐条 transition 等价 ──────────────────────────
 class TestTransitionMany(unittest.TestCase):
     def test_batch_equals_per_item(self):
-        d = tempfile.mkdtemp(prefix="alaya_tmany_")
+        d = tempfile.mkdtemp(prefix="rosmontis_tmany_")
         try:
             batch_db = os.path.join(d, "batch.db")
             single_db = os.path.join(d, "single.db")

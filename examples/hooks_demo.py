@@ -5,7 +5,7 @@
     python examples/hooks_demo.py
 
 这个示例演示的是 **宿主自己拥有对话循环** 的接入形态：
-宿主每轮按四个钩子调 Alaya，而不是把整个循环交给 Harness。
+宿主每轮按四个钩子调 Rosmontis，而不是把整个循环交给 Harness。
 钩子契约见 docs/17-接入形态与接口方案.md §3。
 """
 
@@ -21,8 +21,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-import alaya  # noqa: E402
-from alaya.core import db as DB  # noqa: E402
+import rosmontis  # noqa: E402
+from rosmontis.core import db as DB  # noqa: E402
 
 # Windows 默认控制台是 GBK，中文与箭头符号会直接抛 UnicodeEncodeError。
 # 示例要能在「双击运行 / 无 PYTHONIOENCODING」的情况下跑通，所以这里自己做一次兜底。
@@ -58,7 +58,7 @@ class FakeLLM:
                 "content": "",
                 "tool_calls": [
                     {
-                        "name": "alaya_remember",
+                        "name": "rosmontis_remember",
                         "arguments": {
                             "what": "他说最近累，但不是身体累",
                             "noticed": "说到『加班』时语气很轻，像早就认了",
@@ -93,11 +93,11 @@ def counts(db_path: str) -> dict:
 
 
 def main() -> int:
-    work = tempfile.mkdtemp(prefix="alaya_hooks_demo_")
+    work = tempfile.mkdtemp(prefix="rosmontis_hooks_demo_")
     db_path = os.path.join(work, "hooks.db")
     space, conversation = "u1", "c1"
     llm = FakeLLM()
-    h = alaya.open(
+    h = rosmontis.open(
         db_path,
         {
             "embed_provider": "hash",   # 不联网
@@ -110,7 +110,7 @@ def main() -> int:
     )
 
     print("=" * 64)
-    print("Alaya 四钩子接入示例 · session_start → pre_prompt → post_turn → session_end")
+    print("Rosmontis 四钩子接入示例 · session_start → pre_prompt → post_turn → session_end")
     print("=" * 64)
 
     try:

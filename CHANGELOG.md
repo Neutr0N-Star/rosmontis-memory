@@ -7,10 +7,33 @@
 ### Changed
 
 - **性能默认值变化**：`numpy` 提为默认依赖（`dependencies = ["numpy>=1.24"]`），向量余弦与批量运算默认走 numpy；`numpy` extra 保留为兼容壳，`pip install -e ".[numpy]"` 继续可用。纯 Python 兜底仍在，未装 numpy 也能运行。
-- **备份改为在线备份 + 自检**：`alaya backup` 与迁移前备份改用 SQLite 在线备份 API，并核对核心表行数；并发读者在场时不再产出缺数据的 `.bak`，自检不过就报错退出（不再是 `rc=0` 假成功）。
-- **未实现的 embedding 通道启动即失败**：`ALAYA_EMBED=local` / `openai` 或拼错的值不再静默降级为 `hash`，而是抛 `embed_provider_unavailable`；`context()` 新增 `vector_mode` / `degraded` / `degraded_reason` 三个字段。
+- **备份改为在线备份 + 自检**：`rosmontis backup` 与迁移前备份改用 SQLite 在线备份 API，并核对核心表行数；并发读者在场时不再产出缺数据的 `.bak`，自检不过就报错退出（不再是 `rc=0` 假成功）。
+- **未实现的 embedding 通道启动即失败**：`ROSMONTIS_EMBED=local` / `openai` 或拼错的值不再静默降级为 `hash`，而是抛 `embed_provider_unavailable`；`context()` 新增 `vector_mode` / `degraded` / `degraded_reason` 三个字段。
 
-## [1.1.1] - 2026-10-20
+## [2.0.0] - 2026-10-20
+
+**改名版本。** 项目原名 `Alaya`，与既有同名项目冲突（存在更早的、功能相近的同名项目，会造成检索与安装混淆），故整体更名为 **Rosmontis**。发行名取 `rosmontis-memory`，因为 PyPI 上的 `rosmontis` 已被一个无关的 graphviz 绘图工具占用；Python 包名与 CLI 用 `rosmontis`。本版包含 1.1.1 的全部修复（1.1.1 未公开发布，仅存在于本地提交）。
+
+### BREAKING CHANGES（迁移必读）
+
+| 项目 | 旧 | 新 |
+|---|---|---|
+| Python 包 | `import alaya` | `import rosmontis` |
+| 发行名 | `alaya-memory` | `rosmontis-memory` |
+| CLI | `alaya serve` | `rosmontis serve` |
+| 环境变量前缀 | `ALAYA_*`（约 30 个） | `ROSMONTIS_*` |
+| 默认库文件 | `alaya.db` | `rosmontis.db` |
+| 配置/模型目录 | `~/.alaya` | `~/.rosmontis` |
+
+- **库文件格式未变**：旧的 `alaya.db` 可以直接用 `rosmontis.open("alaya.db")` 打开，不需要迁移。
+- **环境变量必须改名**：`ALAYA_EMBED` → `ROSMONTIS_EMBED`，以此类推。旧前缀不保留别名（项目此前未发布，无存量用户）。
+- **`api_version` 保持 `"1"`**：HTTP `/v1/*` 端点、五个工具名、错误信封均未变，本次改名只影响 Python 包层。
+
+### Fixed（同 1.1.1）
+
+见下方 `[1.1.1]` 节。核心是三条数据正确性（订正联动、补录不篡改当前真理、`as_of` 时态）、换模型后可恢复、备份不再静默产出空文件、未知 embedding provider 启动即失败。
+
+## [1.1.1] - 2026-10-20（未公开发布，内容并入 2.0.0）
 
 修一批「声明了不变量、实现没接上、指标还全绿」的问题。这类问题不崩不报错，但数据是错的，所以单独发一个补丁版本。
 
@@ -24,10 +47,10 @@
 ### Fixed · 信任与可观测
 
 - **备份不再静默产出空文件**：此前 `wal_checkpoint(TRUNCATE)` 返回 `busy` 时只 `except` 不看返回值，并发读时复制出的 `.bak` 可能是坏库，而命令 `rc=0` 还打印 sha256。现在改用 SQLite 在线 backup API，备份后自检三张核心表的行数，失败即抛 `BackupError` / 非零退出。迁移前备份走同一实现——**没备份成功就不许迁移**。
-- **未知 embedding provider 启动即失败**：此前 `ALAYA_EMBED=local` / `openai` / 拼写错误都会静默变成 `hash`（无语义），且降级时写路径不落向量，用户只会觉得"她记不住事"。现在抛 `embed_provider_unavailable`（`retryable=False`），错误消息带原值与可用清单。
+- **未知 embedding provider 启动即失败**：此前 `ROSMONTIS_EMBED=local` / `openai` / 拼写错误都会静默变成 `hash`（无语义），且降级时写路径不落向量，用户只会觉得"她记不住事"。现在抛 `embed_provider_unavailable`（`retryable=False`），错误消息带原值与可用清单。
 - **降级不再只有 `/readyz` 一个出口**：`Handle.context()` 新增 `vector_mode` / `degraded` / `degraded_reason` 三个字段（只增不改），库形态使用者也能察觉。
 - **`wipe()` 失败点名**：此前逐表 `except Exception: pass`，某表删失败仍返回成功。现在返回 `failed_tables`。**顺带修掉一个真 bug：`hyperedge_member` 从来没被 wipe 过。**
-- **锁冲突不再是裸异常**：`tx()` 重试耗尽后抛 `AlayaError("db_locked", retryable=True)`，宿主可按 `retryable` 处理。
+- **锁冲突不再是裸异常**：`tx()` 重试耗尽后抛 `RosmontisError("db_locked", retryable=True)`，宿主可按 `retryable` 处理。
 
 ### Fixed · 其他
 
@@ -39,8 +62,8 @@
 ### Changed
 
 - **numpy 提为默认依赖**：此前 `dependencies = []`，默认安装走纯 Python 余弦，2000 episode 的 `context()` P50 约 1.4s（`cosine_batch` 占 95%）。`[embed]` extra 保留但**当前无推理侧消费者**。
-- `AlayaError` 移到 `alaya/errors.py`（`core` 不能 import `api`，且 `db.tx` 也要抛同一类型）。`alaya.api.AlayaError` 等既有导入路径保持不变。
-- `alaya/__init__.py` 导出面不变。
+- `RosmontisError` 移到 `rosmontis/errors.py`（`core` 不能 import `api`，且 `db.tx` 也要抛同一类型）。`rosmontis.api.RosmontisError` 等既有导入路径保持不变。
+- `rosmontis/__init__.py` 导出面不变。
 
 ### Known limitations（本版未修，已知且记录在案）
 
@@ -60,19 +83,19 @@
 
 ### Added
 
-- **本地访问 token**：首次 `alaya serve` 生成并打印，写入 `~/.alaya/token`；除 `/healthz`、`/readyz`、`/docs`、`/openapi.json` 外，全部 HTTP 面要求 `Authorization: Bearer`。
-- **绑定安全**：`--host` 非回环时必须显式提供 `--token` / `ALAYA_TOKEN`，否则拒绝启动；容器镜像入口自动生成并打印 token。
+- **本地访问 token**：首次 `rosmontis serve` 生成并打印，写入 `~/.rosmontis/token`；除 `/healthz`、`/readyz`、`/docs`、`/openapi.json` 外，全部 HTTP 面要求 `Authorization: Bearer`。
+- **绑定安全**：`--host` 非回环时必须显式提供 `--token` / `ROSMONTIS_TOKEN`，否则拒绝启动；容器镜像入口自动生成并打印 token。
 - **破坏性接口确认**：`/v1/wipe`、`/v1/settings` 需要 `X-Confirm: yes` 或 `?confirm=yes`。
-- **模型资产管理**：`alaya models list/install/where/verify/remove`；断点续传、3 次重试、SHA-256 校验、镜像可换、失败保留旧模型。模型不进 wheel。
+- **模型资产管理**：`rosmontis models list/install/where/verify/remove`；断点续传、3 次重试、SHA-256 校验、镜像可换、失败保留旧模型。模型不进 wheel。
 - **向量可靠性**：断路器（远端失败后不再发起请求、指数退避、恢复自动切回）、向量身份（schema v4 记录 `embed_model`/`embed_dim`，检索只比同身份）、`embed_backfill` 补齐降级期空向量。`/readyz` 输出 `vector_mode`、`embed_model`、`pending_backfill`、断路器状态。
-- **迁移守卫**：高于当前支持的库版本拒绝打开；迁移前自动备份；`alaya.open(..., migrate="auto"|"never"|"dry_run")`。
-- **`ALAYA_HOME`**：`~/.alaya` 统一承载 db、模型、token、`.env`；开发态仍兼容仓库根 `.env`。
+- **迁移守卫**：高于当前支持的库版本拒绝打开；迁移前自动备份；`rosmontis.open(..., migrate="auto"|"never"|"dry_run")`。
+- **`ROSMONTIS_HOME`**：`~/.rosmontis` 统一承载 db、模型、token、`.env`；开发态仍兼容仓库根 `.env`。
 - 发布工程：`py.typed`、sdist + wheel 构建与 `twine check` 进入 CI、契约测试（版本号一致、公共面冻结、openapi 路由齐全）。
 
 ### Changed
 
 - **无模型不再写脏记忆**：没有真实模型输出时不写 assistant 行，库层抛 `llm_unavailable`（`retryable=True`），HTTP 返回 503；流式发 `error` 事件后终止，不落半截回复。
-- CORS 默认不再放行 `Origin: null`；`file://` 场景需显式配置 `ALAYA_CORS_ORIGINS=null`。
+- CORS 默认不再放行 `Origin: null`；`file://` 场景需显式配置 `ROSMONTIS_CORS_ORIGINS=null`。
 - 包元数据补 MIT 许可证分类、Beta 状态、Python 3.13；作者改为项目维护者。
 - 服务根路径 `/` 只返回服务信息 JSON，`/debug` 与静态页面入口移除。
 
@@ -92,20 +115,20 @@
 
 - **统一记忆对象与生命周期状态机**：`episode` 升为唯一 item，新增 `origin/state/state_at/gate_version`、`item_state_log`；schema v3 单事务幂等迁移，失败回滚保持旧版本。
 - **主被动一体**：主动笔记、做梦产物、折叠摘要全部走唯一写入管线（`INSERT INTO episode` 只在 `core/pipeline.py`），`origin ∈ {ingest, tool, system, dream, summary}`。
-- **语义场检索（第四路）**：三路点火（向量/FTS/实体）+ 稀疏扩散（凸组合，有界收敛）+ ACT-R 激活 + 三空间衰减；`ALAYA_FIELD=0` 可关。
-- **公共 API v1**：`alaya.open()` / `Handle`（`wake / context / turn / observe / settle / settle_now / close`），`context` 为纯函数（不写库、不超预算）。
+- **语义场检索（第四路）**：三路点火（向量/FTS/实体）+ 稀疏扩散（凸组合，有界收敛）+ ACT-R 激活 + 三空间衰减；`ROSMONTIS_FIELD=0` 可关。
+- **公共 API v1**：`rosmontis.open()` / `Handle`（`wake / context / turn / observe / settle / settle_now / close`），`context` 为纯函数（不写库、不超预算）。
 - **HTTP 接口**：`/v1/turn`、**`/v1/turn/stream`（SSE：meta→tool→delta→done）**、`/v1/context`、`/v1/observe`、`/v1/session/*`、`/v1/settle`、`/v1/jobs`、`/v1/state|timeline|episodes`，以及 `/healthz`、`/readyz`。
-- **守护进程 `alaya daemon`**（含 `--once`）：60s 心跳，自动 review / dream / settle / forget，按 `ALAYA_IDLE_TIMEOUT`（默认 1800 秒）对空闲会话结算；SIGINT/SIGTERM 优雅收尾。
+- **守护进程 `rosmontis daemon`**（含 `--once`）：60s 心跳，自动 review / dream / settle / forget，按 `ROSMONTIS_IDLE_TIMEOUT`（默认 1800 秒）对空闲会话结算；SIGINT/SIGTERM 优雅收尾。
 - **任务与幂等**：`job` 表（租约/退避/死信/重放）；写接口支持 `Idempotency-Key`（24h 内同键回放且只写一条）。
-- **分发与工程化**：`pyproject.toml`、`alaya` 命令、`python -m alaya`、Dockerfile + compose、`openapi.json` 契约快照、GitHub Actions CI、MIT LICENSE、`docs/RELEASING.md`。
+- **分发与工程化**：`pyproject.toml`、`rosmontis` 命令、`python -m rosmontis`、Dockerfile + compose、`openapi.json` 契约快照、GitHub Actions CI、MIT LICENSE、`docs/RELEASING.md`。
 - **文档**：README（接入优先）、`docs/14–17`、`docs/guides/{quickstart-library,api-reference,operations}.md`、本变更日志。
 - **测试与基准**：124 项单元测试全绿；`bench/` 可复现质量基准与帕累托前沿（200 段合成对话 / 135 题）。
 
 ### Changed
 
-- `tier`/`source` 降为**兼容投影**，`state` 为生命周期真值；召回按状态过滤（`archived/muted` 恒不可见，`inbox` 默认不可检索，可用 `ALAYA_INBOX_RETRIEVABLE` 打开）。
+- `tier`/`source` 降为**兼容投影**，`state` 为生命周期真值；召回按状态过滤（`archived/muted` 恒不可见，`inbox` 默认不可检索，可用 `ROSMONTIS_INBOX_RETRIEVABLE` 打开）。
 - 错误信封统一为 `{ok, data, error{code, retryable, message}}`，5xx 默认 `retryable=true`。
-- CORS 默认只放行本机来源与 `file://`，可用 `ALAYA_CORS_ORIGINS` 覆盖。
+- CORS 默认只放行本机来源与 `file://`，可用 `ROSMONTIS_CORS_ORIGINS` 覆盖。
 
 ### Fixed
 

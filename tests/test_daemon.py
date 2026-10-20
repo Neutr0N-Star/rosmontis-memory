@@ -29,14 +29,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from alaya import Config, cli  # noqa: E402
-from alaya.core import db as DB  # noqa: E402
-from alaya.core import jobs  # noqa: E402
-from alaya.core.memory import Memory  # noqa: E402
-from alaya.harness import Harness  # noqa: E402
+from rosmontis import Config, cli  # noqa: E402
+from rosmontis.core import db as DB  # noqa: E402
+from rosmontis.core import jobs  # noqa: E402
+from rosmontis.core.memory import Memory  # noqa: E402
+from rosmontis.harness import Harness  # noqa: E402
 
 try:  # FastAPI 是可选依赖；没装时 HTTP/信号测试跳过，其余单测仍可跑
-    from alaya.service import app as service_app
+    from rosmontis.service import app as service_app
 
     _SERVICE_IMPORT_ERROR = None
 except Exception as e:  # pragma: no cover
@@ -53,7 +53,7 @@ class EchoLLM:
 
 class DaemonCase(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.mkdtemp(prefix="alaya_daemon_")
+        self.tmp = tempfile.mkdtemp(prefix="rosmontis_daemon_")
         self.cfg = Config(
             db_path=os.path.join(self.tmp, "t.db"),
             embed_provider="hash",
@@ -241,11 +241,11 @@ class TestDaemonHeartbeat(DaemonCase):
 
     def test_cli_daemon_once(self):
         db = os.path.join(self.tmp, "cli.db")
-        keys = ("ALAYA_DB", "ALAYA_EMBED", "ALAYA_LLM_HOT", "ALAYA_LLM_DEEP", "ALAYA_LOG")
+        keys = ("ROSMONTIS_DB", "ROSMONTIS_EMBED", "ROSMONTIS_LLM_HOT", "ROSMONTIS_LLM_DEEP", "ROSMONTIS_LOG")
         old = {k: os.environ.get(k) for k in keys}
         os.environ.update({
-            "ALAYA_DB": db, "ALAYA_EMBED": "hash",
-            "ALAYA_LLM_HOT": "rule", "ALAYA_LLM_DEEP": "rule", "ALAYA_LOG": "ERROR",
+            "ROSMONTIS_DB": db, "ROSMONTIS_EMBED": "hash",
+            "ROSMONTIS_LLM_HOT": "rule", "ROSMONTIS_LLM_DEEP": "rule", "ROSMONTIS_LOG": "ERROR",
         })
         try:
             buf = io.StringIO()
@@ -272,7 +272,7 @@ class TestDaemonHeartbeat(DaemonCase):
             rc = cli.main(["--version"])
         self.assertEqual(rc, 0)
         text = buf.getvalue().strip()
-        self.assertRegex(text, r"^alaya \d+\.\d+\.\d+  \(api v\d+\)$")
+        self.assertRegex(text, r"^rosmontis \d+\.\d+\.\d+  \(api v\d+\)$")
 
         top = cli.build_parser().format_help()
         self.assertIn("daemon", top)
@@ -288,15 +288,15 @@ class TestDaemonSignal(unittest.TestCase):
     """真实进程：kernel 信号 → daemon 收尾退出（Windows 用 CTRL_BREAK，POSIX 用 SIGTERM）。"""
 
     def test_daemon_stops_on_signal(self):
-        tmp = tempfile.mkdtemp(prefix="alaya_daemon_sig_")
+        tmp = tempfile.mkdtemp(prefix="rosmontis_daemon_sig_")
         log_path = os.path.join(tmp, "daemon.log")
         env = os.environ.copy()
         env.update({
-            "ALAYA_DB": os.path.join(tmp, "t.db"),
-            "ALAYA_EMBED": "hash",
-            "ALAYA_LLM_HOT": "rule",
-            "ALAYA_LLM_DEEP": "rule",
-            "ALAYA_LOG": "ERROR",
+            "ROSMONTIS_DB": os.path.join(tmp, "t.db"),
+            "ROSMONTIS_EMBED": "hash",
+            "ROSMONTIS_LLM_HOT": "rule",
+            "ROSMONTIS_LLM_DEEP": "rule",
+            "ROSMONTIS_LOG": "ERROR",
             "PYTHONPATH": str(ROOT),
             "PYTHONIOENCODING": "utf-8",
         })
@@ -485,26 +485,26 @@ class TestServiceShutdown(unittest.TestCase):
     def test_graceful_signal_runs_lifespan(self):
         if service_app is None:
             self.skipTest(f"fastapi 不可用：{_SERVICE_IMPORT_ERROR}")
-        tmp = tempfile.mkdtemp(prefix="alaya_sigterm_")
+        tmp = tempfile.mkdtemp(prefix="rosmontis_sigterm_")
         log_path = os.path.join(tmp, "uvicorn.log")
         marker = os.path.join(tmp, "shutdown.json")
         port = self._free_port()
         env = os.environ.copy()
         env.update({
-            "ALAYA_DB": os.path.join(tmp, "t.db"),
-            "ALAYA_EMBED": "hash",
-            "ALAYA_LLM_HOT": "rule",
-            "ALAYA_LLM_DEEP": "rule",
-            "ALAYA_LOG": "INFO",
-            "ALAYA_SHUTDOWN_MARKER": marker,
-            "ALAYA_TOKEN": "test-token",
+            "ROSMONTIS_DB": os.path.join(tmp, "t.db"),
+            "ROSMONTIS_EMBED": "hash",
+            "ROSMONTIS_LLM_HOT": "rule",
+            "ROSMONTIS_LLM_DEEP": "rule",
+            "ROSMONTIS_LOG": "INFO",
+            "ROSMONTIS_SHUTDOWN_MARKER": marker,
+            "ROSMONTIS_TOKEN": "test-token",
             "PYTHONPATH": str(ROOT),
             "PYTHONIOENCODING": "utf-8",
         })
         flags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) if os.name == "nt" else 0
         logf = open(log_path, "w", encoding="utf-8")
         proc = subprocess.Popen(
-            [sys.executable, "-m", "uvicorn", "alaya.service.app:app",
+            [sys.executable, "-m", "uvicorn", "rosmontis.service.app:app",
              "--host", "127.0.0.1", "--port", str(port), "--log-level", "info"],
             cwd=str(ROOT), env=env, stdout=logf, stderr=subprocess.STDOUT,
             creationflags=flags,

@@ -22,7 +22,7 @@ from . import timeparse
 from . import vec as V
 from .embed import Embedder
 
-log = logging.getLogger("alaya.recall")
+log = logging.getLogger("rosmontis.recall")
 
 # 四级反射深度。规模按查询复杂度伸缩——问"我住哪"不必扫全库。
 # 参数参考 NeuralMemory 的 ReflexPipeline（INSTANT / CONTEXT / HABIT / DEEP）。
@@ -387,7 +387,7 @@ def _field_route(
     """语义场一路：点火 + 稀疏扩散 → 候选 node key。
 
     与 dense/sparse/graph 并列参与 RRF 融合。场只决定"从哪里点亮、点亮了
-    哪些邻居"，排序仍由 docs/03 §4.3 的分项决定。`ALAYA_FIELD=0` 时整路关闭，
+    哪些邻居"，排序仍由 docs/03 §4.3 的分项决定。`ROSMONTIS_FIELD=0` 时整路关闭，
     plan_json 里会留下 field_enabled=false 的证据。
     """
     if not FD.enabled():

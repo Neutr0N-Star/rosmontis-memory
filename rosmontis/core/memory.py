@@ -30,7 +30,7 @@ from . import write as WR
 from .embed import Embedder
 from .llm import LLM
 
-log = logging.getLogger("alaya.memory")
+log = logging.getLogger("rosmontis.memory")
 
 
 class Memory:
@@ -238,7 +238,8 @@ class Memory:
         ]
 
     def entity_detail(self, entity_id: str, as_of: float | None = None) -> dict | None:
-        as_of = as_of or time.time()
+        # `as_of` 用 is None 判：0.0 是"时间轴原点"，不是"没传"
+        as_of = time.time() if as_of is None else float(as_of)
         with DB.reader(self.cfg.db_path) as conn:
             e = conn.execute("SELECT * FROM entity WHERE id=?", (entity_id,)).fetchone()
             if e is None:
@@ -345,10 +346,21 @@ class Memory:
         只动带 session_id 的表。这个操作不可逆，调用方必须先确认。
         任何一张表删失败都会在返回值里点名（`ok=False` + `failed_tables`）——
         以前异常被 except 吞掉，调用方看到的是"擦干净了"，实际留了残片。
+
+        `episode_fts` 没有 `session_id` 列：必须先取该 session 的 episode id
+        再按 id 删。之前这里只换了列名、参数还是 session_id，`WHERE
+        episode_id='s1'` 恒 0 行且**不抛异常**——wipe 报成功，手机号还留在
+        FTS 里能被 MATCH 命中。这是隐私接口，静默失败等于骗人。
         """
         counts = {}
         failed: list[str] = []
         with DB.tx(self.cfg.db_path) as conn:
+            # 先把本 session 的 episode id 取出来：后面删 FTS 要按 id 删，
+            # 而 FTS 必须赶在 episode 之前删（否则子查询/复查都取不到 id）。
+            ep_ids = [
+                str(r[0])
+                for r in conn.execute("SELECT id FROM episode WHERE session_id=?", (session_id,)).fetchall()
+            ]
             # 审计表没有 session_id，先按 episode 归属清掉，避免删库后留孤儿日志
             try:
                 cur = conn.execute(
@@ -374,16 +386,39 @@ class Memory:
                 failed.append("hyperedge_member")
             for t in self._WIPE_TABLES:
                 try:
-                    col = "episode_id" if t == "episode_fts" else "session_id"
-                    cur = conn.execute(f"DELETE FROM {t} WHERE {col}=?", (session_id,))
+                    if t == "episode_fts":
+                        counts[t] = self._delete_episode_fts(conn, ep_ids)
+                        continue
+                    cur = conn.execute(f"DELETE FROM {t} WHERE session_id=?", (session_id,))
                     counts[t] = cur.rowcount
                 except Exception:
                     failed.append(t)
+            # 删完复查：没有 session_id 的表列名写错也不会抛异常，只有复查才能
+            # 发现"以为删了其实没删"。复查不通过按失败上报，不让 ok=True 蒙过去。
+            if ep_ids and self._count_episode_fts(conn, ep_ids):
+                failed.append("episode_fts")
         out = {"session_id": session_id, "wiped": counts}
         if failed:
             log.warning("wipe 有表未删成功：%s", failed)
             out = {"ok": False, "failed_tables": failed, **out}
         return out
+
+    @staticmethod
+    def _delete_episode_fts(conn, ep_ids: list[str]) -> int:
+        """按 episode id 删 FTS 行；没有 id 时不发 SQL（空 IN () 是语法错误）。"""
+        if not ep_ids:
+            return 0
+        marks = ",".join("?" * len(ep_ids))
+        return conn.execute(f"DELETE FROM episode_fts WHERE episode_id IN ({marks})", ep_ids).rowcount
+
+    @staticmethod
+    def _count_episode_fts(conn, ep_ids: list[str]) -> int:
+        if not ep_ids:
+            return 0
+        marks = ",".join("?" * len(ep_ids))
+        return int(
+            conn.execute(f"SELECT COUNT(*) c FROM episode_fts WHERE episode_id IN ({marks})", ep_ids).fetchone()["c"]
+        )
 
     def state_snapshot(
         self, scope: str, as_of: float | None = None, session_id: str | None = None
@@ -391,7 +426,8 @@ class Memory:
         # session_id 必须过滤。state_slot 表本来就有这个字段，早期单会话时
         # 漏了过滤条件——加了角色卡之后才暴露：A 角色说"我叫甲"，
         # B 角色说"我叫乙"，两边会互相覆盖。
-        as_of = as_of or time.time()
+        # `as_of` 用 is None 判：0.0 是"时间轴原点"，不是"没传"
+        as_of = time.time() if as_of is None else float(as_of)
         with DB.reader(self.cfg.db_path) as conn:
             # entity 查询必须带 session：库里每个会话都有一条 norm_name=「我」，
             # 不过滤的话 OR norm_name 永远命中第一条（别的会话的），
@@ -909,22 +945,25 @@ class Memory:
         只认 `embedding IS NULL` 的话，换模型后旧身份向量非 NULL → 不重算也不
         计数 → `/readyz` 全绿而库半失明。两个数拆开报，运维才知道该重算多少。
 
-        拿不到当前身份（embedder 不可用 / model 名为空）时只数 NULL：
-        没有基准就不该断言"谁的向量不对"——塞一个 `!= ''` 的 SQL 条件会把
+        拿不到当前身份（embedder 不可用 / model 名为空 / `vector_mode=none`）时只数
+        NULL：没有基准就不该断言"谁的向量不对"——塞一个 `!= ''` 的 SQL 条件会把
         所有写过身份的行都算成 stale，把排查方向引到"向量坏了"这种错结论上。
         `identity_known` 让调用方一眼看出这个数是"真的 0"还是"数不出来"。
         """
         model_id, _dim = WR.embedding_identity(self.embedder)
+        # `none`（无向量模式）没有"当前身份"可言：即便配了模型名，也不该拿它
+        # 去断言"谁的向量不对"——那些数既不可行动，还会把排查引向错的方向。
+        known = bool(model_id) and self.vector_mode() != "none"
         out = {
             "null_vectors": 0,
             "stale_identity": 0,
             "total": 0,
             "pending_backfill": 0,
-            "identity_known": bool(model_id),
+            "identity_known": known,
         }
         with DB.reader(self.cfg.db_path) as conn:
             for table in ("episode", "fact"):
-                if model_id:
+                if known:
                     sql = f"""SELECT
                                 SUM(CASE WHEN embedding IS NULL THEN 1 ELSE 0 END) AS n_null,
                                 SUM(CASE WHEN embedding IS NOT NULL
@@ -1086,12 +1125,12 @@ class Memory:
 
         判定：`last_active <= now - idle_timeout`，且 `last_active >= now - max_age`
         （后者避免把几个月前的历史会话全部翻出来重结算）。
-        `idle_timeout_s` 缺省读 `ALAYA_IDLE_TIMEOUT`（默认 1800 秒）；
-        `max_age_s` 缺省读 `ALAYA_SETTLE_MAX_AGE`（默认 86400 秒）。
+        `idle_timeout_s` 缺省读 `ROSMONTIS_IDLE_TIMEOUT`（默认 1800 秒）；
+        `max_age_s` 缺省读 `ROSMONTIS_SETTLE_MAX_AGE`（默认 86400 秒）。
         """
         now = time.time() if now is None else float(now)
-        timeout = _idle_env_float("ALAYA_IDLE_TIMEOUT", 1800.0) if idle_timeout_s is None else float(idle_timeout_s)
-        max_age = _idle_env_float("ALAYA_SETTLE_MAX_AGE", 86400.0) if max_age_s is None else float(max_age_s)
+        timeout = _idle_env_float("ROSMONTIS_IDLE_TIMEOUT", 1800.0) if idle_timeout_s is None else float(idle_timeout_s)
+        max_age = _idle_env_float("ROSMONTIS_SETTLE_MAX_AGE", 86400.0) if max_age_s is None else float(max_age_s)
         if timeout <= 0:
             return []
         params: list = [now - timeout]

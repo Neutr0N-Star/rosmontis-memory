@@ -14,7 +14,7 @@ import re
 import urllib.error
 import urllib.request
 
-log = logging.getLogger("alaya.llm")
+log = logging.getLogger("rosmontis.llm")
 
 _FENCE = re.compile(r"```(?:json)?\s*(.*?)```", re.S)
 

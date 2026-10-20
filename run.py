@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""藏识 Alaya 启动器。
+"""藏识 Rosmontis 启动器。
 
 用法：
     python run.py serve            启动服务（默认 8770）
@@ -21,7 +21,7 @@ sys.path.insert(0, str(ROOT))
 
 BANNER = r"""
   ┌─────────────────────────────────────────┐
-  │  藏识 Alaya · 长期记忆器官               │
+  │  藏识 Rosmontis · 长期记忆器官               │
   │  五层记忆 · 三档注入 · 预算约束检索       │
   └─────────────────────────────────────────┘
 """
@@ -53,9 +53,9 @@ def main() -> int:
         print("  python run.py stats                    统计")
         print()
         print("环境变量（可选）:")
-        print("  ALAYA_DB=alaya.db              数据库路径")
-        print("  ALAYA_EMBED=ollama|hash        向量来源")
-        print("  ALAYA_LLM_HOT=ollama|openai|rule  抽取模型")
+        print("  ROSMONTIS_DB=rosmontis.db              数据库路径")
+        print("  ROSMONTIS_EMBED=ollama|hash        向量来源")
+        print("  ROSMONTIS_LLM_HOT=ollama|openai|rule  抽取模型")
         return 0
 
     problems = check()
@@ -77,12 +77,12 @@ def main() -> int:
             print("  pip install fastapi uvicorn")
             return 1
         print(BANNER)
-        from alaya.cli import main as cli_main
+        from rosmontis.cli import main as cli_main
 
         # 参数原样透传：--host / --port / --token 都归 CLI 处理
         return cli_main(argv)
 
-    from alaya.cli import main as cli_main
+    from rosmontis.cli import main as cli_main
 
     return cli_main(argv)
 

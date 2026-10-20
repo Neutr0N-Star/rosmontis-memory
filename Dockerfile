@@ -1,6 +1,6 @@
-# 藏识 Alaya 本地服务镜像
-# 构建：docker build -t alaya-memory .
-# 运行：docker run -p 127.0.0.1:8770:8770 -v alaya-data:/data alaya-memory
+# 藏识 Rosmontis 本地服务镜像
+# 构建：docker build -t rosmontis-memory .
+# 运行：docker run -p 127.0.0.1:8770:8770 -v rosmontis-data:/data rosmontis-memory
 #      首次启动会把访问 token 写入卷（/data/token）并打印到日志；客户端带
 #      Authorization: Bearer <token> 访问 /v1/*。
 FROM python:3.12-slim
@@ -9,13 +9,13 @@ WORKDIR /app
 
 # 只装核心 + 服务依赖；numpy/jieba 由 serve extra 带
 COPY pyproject.toml README.md LICENSE ./
-COPY alaya ./alaya
+COPY rosmontis ./rosmontis
 RUN pip install --no-cache-dir ".[serve]"
 
-# 模型与记忆都放卷里（ALAYA_HOME 派生出 db / models / token）
-ENV ALAYA_HOME=/data \
-    ALAYA_EMBED=hash \
-    ALAYA_LLM_HOT=rule \
+# 模型与记忆都放卷里（ROSMONTIS_HOME 派生出 db / models / token）
+ENV ROSMONTIS_HOME=/data \
+    ROSMONTIS_EMBED=hash \
+    ROSMONTIS_LLM_HOT=rule \
     PYTHONIOENCODING=utf-8
 
 COPY docker/entrypoint.sh /entrypoint.sh

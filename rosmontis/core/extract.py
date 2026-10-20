@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from . import timeparse
 from .llm import LLM
 
-log = logging.getLogger("alaya.extract")
+log = logging.getLogger("rosmontis.extract")
 
 PREDICATES = [
     "工作在", "住在", "喜欢", "讨厌", "害怕", "有", "叫", "是", "关系是",

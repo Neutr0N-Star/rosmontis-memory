@@ -25,7 +25,7 @@ import time
 import uuid
 from functools import lru_cache
 
-log = logging.getLogger("alaya.tools")
+log = logging.getLogger("rosmontis.tools")
 
 # ── item 状态机（docs/15 §3.1）────────────────────────────────
 STATE_INBOX = "inbox"
@@ -54,7 +54,7 @@ TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "alaya_remember",
+            "name": "rosmontis_remember",
             "description": (
                 "把一件事留给以后的自己。不是记流水账——只记你觉得将来还用得上的。"
                 "如果只有『发生了什么』，它会进速记层，之后可能被丢弃；"
@@ -82,7 +82,7 @@ TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "alaya_recall",
+            "name": "rosmontis_recall",
             "description": "主动查一件事。你已经拿到的上下文里没有再查，别重复查同一个问题。",
             "parameters": {
                 "type": "object",
@@ -97,7 +97,7 @@ TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "alaya_promote",
+            "name": "rosmontis_promote",
             "description": (
                 "把一条笔记升格为「我就是这样」。只有当一条判断你反复想到、"
                 "并且觉得它已经是你的一部分时才用。这会被系统限制频率。"
@@ -119,7 +119,7 @@ TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "alaya_revise",
+            "name": "rosmontis_revise",
             "description": "订正一条你以前记错的笔记。原文会保留，不是覆盖。",
             "parameters": {
                 "type": "object",
@@ -135,7 +135,7 @@ TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "alaya_skip",
+            "name": "rosmontis_skip",
             "description": "某件事你不想再提了。它不会被删除，但会沉下去，不再主动浮现。",
             "parameters": {
                 "type": "object",
@@ -384,7 +384,7 @@ def _promote(mem, args: dict, session_id: str) -> dict:
     if "state" not in r and "to" not in r and P is not None and hasattr(P, "transition"):
         try:
             tr = P.transition(note_id, "promote_persona", target=section,
-                              reason="tool:alaya_promote", actor="model", cfg=mem.cfg)
+                              reason="tool:rosmontis_promote", actor="model", cfg=mem.cfg)
             mapped = _map_pipeline_result(tr, note_id)
             if mapped["ok"]:
                 prev, state = mapped["from"] or prev, mapped["to"] or state
@@ -433,7 +433,7 @@ def _skip(mem, args: dict, session_id: str) -> dict:
     P = _pipeline()
     if P is not None and hasattr(P, "transition"):
         try:
-            tr = P.transition(item_id, "skip", reason="tool:alaya_skip", actor="model", cfg=mem.cfg)
+            tr = P.transition(item_id, "skip", reason="tool:rosmontis_skip", actor="model", cfg=mem.cfg)
             mapped = _map_pipeline_result(tr, item_id)
             if mapped["ok"]:
                 return mapped
@@ -649,10 +649,10 @@ def dispatch(mem, name: str, args: dict, session_id: str) -> dict:
     """
     args = args or {}
     try:
-        if name == "alaya_remember":
+        if name == "rosmontis_remember":
             return _remember(mem, args, session_id)
 
-        if name == "alaya_recall":
+        if name == "rosmontis_recall":
             q = (args.get("query") or "").strip()
             if not q:
                 return {"ok": False, "reason": "query 不能为空"}
@@ -666,13 +666,13 @@ def dispatch(mem, name: str, args: dict, session_id: str) -> dict:
                 "count": len(r.get("items", [])),
             }
 
-        if name == "alaya_promote":
+        if name == "rosmontis_promote":
             return _promote(mem, args, session_id)
 
-        if name == "alaya_revise":
+        if name == "rosmontis_revise":
             return _revise(mem, args, session_id)
 
-        if name == "alaya_skip":
+        if name == "rosmontis_skip":
             return _skip(mem, args, session_id)
 
         return _result(False, state="", to_state="", reason=f"没有这个工具：{name}")

@@ -19,7 +19,7 @@ from . import memory_field as MF
 from . import pipeline as TR
 from .llm import LLM
 
-log = logging.getLogger("alaya.forget")
+log = logging.getLogger("rosmontis.forget")
 
 
 @dataclass

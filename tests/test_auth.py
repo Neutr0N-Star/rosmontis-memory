@@ -1,7 +1,7 @@
 """D2 本地鉴权 / 绑定安全 / 破坏性接口确认测试。
 
 运行：PYTHONIOENCODING=utf-8 python tests/test_auth.py
-不联网：起真实 uvicorn 只绑 127.0.0.1，用临时库与临时 ALAYA_HOME。
+不联网：起真实 uvicorn 只绑 127.0.0.1，用临时库与临时 ROSMONTIS_HOME。
 """
 
 from __future__ import annotations
@@ -24,10 +24,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from alaya import cli  # noqa: E402
+from rosmontis import cli  # noqa: E402
 
 try:  # FastAPI 是可选依赖；没装时跳过 HTTP 用例
-    from alaya.service import app as service_app
+    from rosmontis.service import app as service_app
 
     _SERVICE_IMPORT_ERROR = None
 except Exception as e:  # pragma: no cover
@@ -86,26 +86,26 @@ class AuthServerCase(unittest.TestCase):
     def setUpClass(cls):
         if service_app is None:
             raise unittest.SkipTest(f"fastapi 不可用：{_SERVICE_IMPORT_ERROR}")
-        cls.tmp = tempfile.mkdtemp(prefix="alaya_auth_")
+        cls.tmp = tempfile.mkdtemp(prefix="rosmontis_auth_")
         cls.port = _free_port()
         cls.base = f"http://127.0.0.1:{cls.port}"
         cls.log_path = os.path.join(cls.tmp, "uvicorn.log")
         env = os.environ.copy()
         env.update({
-            "ALAYA_DB": os.path.join(cls.tmp, "t.db"),
-            "ALAYA_HOME": os.path.join(cls.tmp, "home"),
-            "ALAYA_EMBED": "hash",
-            "ALAYA_LLM_HOT": "rule",
-            "ALAYA_LLM_DEEP": "rule",
-            "ALAYA_LOG": "ERROR",
-            "ALAYA_TOKEN": cls.TOKEN,
+            "ROSMONTIS_DB": os.path.join(cls.tmp, "t.db"),
+            "ROSMONTIS_HOME": os.path.join(cls.tmp, "home"),
+            "ROSMONTIS_EMBED": "hash",
+            "ROSMONTIS_LLM_HOT": "rule",
+            "ROSMONTIS_LLM_DEEP": "rule",
+            "ROSMONTIS_LOG": "ERROR",
+            "ROSMONTIS_TOKEN": cls.TOKEN,
             "PYTHONPATH": str(ROOT),
             "PYTHONIOENCODING": "utf-8",
         })
         cls.logf = open(cls.log_path, "w", encoding="utf-8")
         flags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) if os.name == "nt" else 0
         cls.proc = subprocess.Popen(
-            [sys.executable, "-m", "uvicorn", "alaya.service.app:app",
+            [sys.executable, "-m", "uvicorn", "rosmontis.service.app:app",
              "--host", "127.0.0.1", "--port", str(cls.port), "--log-level", "warning"],
             cwd=str(ROOT), env=env, stdout=cls.logf, stderr=subprocess.STDOUT,
             creationflags=flags,
@@ -234,11 +234,11 @@ class AuthServerCase(unittest.TestCase):
 
 class TokenFileAndBindCase(unittest.TestCase):
     def setUp(self):
-        self._saved = {k: os.environ.get(k) for k in ("ALAYA_HOME", "ALAYA_TOKEN", "ALAYA_DB")}
-        self.tmp = tempfile.mkdtemp(prefix="alaya_token_")
-        os.environ.pop("ALAYA_TOKEN", None)
-        os.environ["ALAYA_HOME"] = os.path.join(self.tmp, "home")
-        os.environ["ALAYA_DB"] = os.path.join(self.tmp, "t.db")
+        self._saved = {k: os.environ.get(k) for k in ("ROSMONTIS_HOME", "ROSMONTIS_TOKEN", "ROSMONTIS_DB")}
+        self.tmp = tempfile.mkdtemp(prefix="rosmontis_token_")
+        os.environ.pop("ROSMONTIS_TOKEN", None)
+        os.environ["ROSMONTIS_HOME"] = os.path.join(self.tmp, "home")
+        os.environ["ROSMONTIS_DB"] = os.path.join(self.tmp, "t.db")
 
     def tearDown(self):
         for k, v in self._saved.items():
@@ -274,7 +274,7 @@ class TokenFileAndBindCase(unittest.TestCase):
         self.assertIn("--token", msg)
 
     def test_non_loopback_refuses_start(self):
-        old = os.environ.pop("ALAYA_TOKEN", None)
+        old = os.environ.pop("ROSMONTIS_TOKEN", None)
         import contextlib
         import io
 
@@ -285,38 +285,38 @@ class TokenFileAndBindCase(unittest.TestCase):
                                "serve", "--host", "0.0.0.0", "--port", "1"])
         finally:
             if old is not None:
-                os.environ["ALAYA_TOKEN"] = old
+                os.environ["ROSMONTIS_TOKEN"] = old
         self.assertEqual(rc, 2)
         self.assertIn("拒绝启动", err.getvalue())
 
 
 class ServePrintsTokenCase(unittest.TestCase):
-    """真实 `alaya serve` 首次启动：生成 token、打印一次、带 token 才能访问。"""
+    """真实 `rosmontis serve` 首次启动：生成 token、打印一次、带 token 才能访问。"""
 
     def test_cli_serve_prints_token_and_enforces_auth(self):
         if service_app is None:
             self.skipTest(f"fastapi 不可用：{_SERVICE_IMPORT_ERROR}")
-        tmp = tempfile.mkdtemp(prefix="alaya_serve_")
+        tmp = tempfile.mkdtemp(prefix="rosmontis_serve_")
         home = os.path.join(tmp, "home")
         log_path = os.path.join(tmp, "serve.log")
         port = _free_port()
-        saved = {k: os.environ.get(k) for k in ("ALAYA_HOME", "ALAYA_TOKEN", "ALAYA_DB")}
-        os.environ.pop("ALAYA_TOKEN", None)
-        os.environ["ALAYA_HOME"] = home
-        os.environ["ALAYA_DB"] = os.path.join(tmp, "t.db")
+        saved = {k: os.environ.get(k) for k in ("ROSMONTIS_HOME", "ROSMONTIS_TOKEN", "ROSMONTIS_DB")}
+        os.environ.pop("ROSMONTIS_TOKEN", None)
+        os.environ["ROSMONTIS_HOME"] = home
+        os.environ["ROSMONTIS_DB"] = os.path.join(tmp, "t.db")
         env = os.environ.copy()
         env.update({
-            "ALAYA_EMBED": "hash",
-            "ALAYA_LLM_HOT": "rule",
-            "ALAYA_LLM_DEEP": "rule",
-            "ALAYA_LOG": "ERROR",
+            "ROSMONTIS_EMBED": "hash",
+            "ROSMONTIS_LLM_HOT": "rule",
+            "ROSMONTIS_LLM_DEEP": "rule",
+            "ROSMONTIS_LOG": "ERROR",
             "PYTHONPATH": str(ROOT),
             "PYTHONIOENCODING": "utf-8",
         })
         flags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) if os.name == "nt" else 0
         logf = open(log_path, "w", encoding="utf-8")
         proc = subprocess.Popen(
-            [sys.executable, "-m", "alaya", "serve", "--host", "127.0.0.1", "--port", str(port)],
+            [sys.executable, "-m", "rosmontis", "serve", "--host", "127.0.0.1", "--port", str(port)],
             cwd=str(ROOT), env=env, stdout=logf, stderr=subprocess.STDOUT,
             creationflags=flags,
         )
@@ -333,7 +333,7 @@ class ServePrintsTokenCase(unittest.TestCase):
                 if proc.poll() is not None:
                     self.fail(f"serve 进程提前退出：{text[-1500:]}")
                 time.sleep(0.1)
-            self.assertIsNotNone(token, "alaya serve 首次启动必须打印 token")
+            self.assertIsNotNone(token, "rosmontis serve 首次启动必须打印 token")
             base = f"http://127.0.0.1:{port}"
             _wait_http(base + "/healthz")
             status, _h, _b = _request(base + "/v1/jobs")

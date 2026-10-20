@@ -1,7 +1,7 @@
 """C2 可见性接线测试：recall 按状态过滤（inbox 默认不可检索、archived/muted 恒不可见）。
 
 运行：PYTHONIOENCODING=utf-8 python tests/test_visibility.py
-不依赖 Ollama / 网络；v2 旧库用例只建临时库，不碰真库 `alaya.db`。
+不依赖 Ollama / 网络；v2 旧库用例只建临时库，不碰真库 `rosmontis.db`。
 """
 
 from __future__ import annotations
@@ -19,14 +19,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from alaya import Config  # noqa: E402
-from alaya.core import db as DB  # noqa: E402
-from alaya.core import item as IT  # noqa: E402
-from alaya.core import pipeline as TR  # noqa: E402
-from alaya.core import recall as RC  # noqa: E402
-from alaya.core import text as TX  # noqa: E402
-from alaya.core.embed import Embedder  # noqa: E402
-from alaya.core.memory import Memory  # noqa: E402
+from rosmontis import Config  # noqa: E402
+from rosmontis.core import db as DB  # noqa: E402
+from rosmontis.core import item as IT  # noqa: E402
+from rosmontis.core import pipeline as TR  # noqa: E402
+from rosmontis.core import recall as RC  # noqa: E402
+from rosmontis.core import text as TX  # noqa: E402
+from rosmontis.core.embed import Embedder  # noqa: E402
+from rosmontis.core.memory import Memory  # noqa: E402
 
 
 class FakeLLM:
@@ -52,7 +52,7 @@ class FakeLLM:
 
 
 def mk(tag: str = "vis") -> tuple[Memory, FakeLLM, str]:
-    d = tempfile.mkdtemp(prefix=f"alaya_vis_{tag}_")
+    d = tempfile.mkdtemp(prefix=f"rosmontis_vis_{tag}_")
     cfg = Config(
         db_path=os.path.join(d, "t.db"),
         embed_provider="hash",
@@ -275,7 +275,7 @@ class TestLegacyV2Fallback(unittest.TestCase):
     """v2 旧库没有 state 列：用 tier/archived/muted 兼容投影，不得抛错。"""
 
     def test_v2_recall_does_not_crash(self):
-        d = tempfile.mkdtemp(prefix="alaya_vis_v2_")
+        d = tempfile.mkdtemp(prefix="rosmontis_vis_v2_")
         db_path = os.path.join(d, "v2.db")
         conn = sqlite3.connect(db_path)
         try:

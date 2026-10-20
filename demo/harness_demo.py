@@ -11,8 +11,8 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from alaya import Config
-from alaya.harness import Harness
+from rosmontis import Config
+from rosmontis.harness import Harness
 
 
 class ScriptedLLM:
@@ -44,13 +44,13 @@ class ScriptedLLM:
             self.stage += 1
             return {"content": "嗯，我在听。", "tool_calls": []}
 
-        if "alaya_remember" not in self.done:
-            self.done.add("alaya_remember")
+        if "rosmontis_remember" not in self.done:
+            self.done.add("rosmontis_remember")
             return {
                 "content": "",
                 "tool_calls": [
                     {
-                        "name": "alaya_remember",
+                        "name": "rosmontis_remember",
                         "arguments": {
                             "what": "他说他换工作了",
                             "noticed": "说的时候没高兴，倒像松了口气",
@@ -62,16 +62,16 @@ class ScriptedLLM:
                 ],
             }
 
-        if "alaya_recall" not in self.done:
-            self.done.add("alaya_recall")
-            return {"content": "", "tool_calls": [{"name": "alaya_recall", "arguments": {"query": "他工作的事"}}]}
+        if "rosmontis_recall" not in self.done:
+            self.done.add("rosmontis_recall")
+            return {"content": "", "tool_calls": [{"name": "rosmontis_recall", "arguments": {"query": "他工作的事"}}]}
 
-        if "alaya_promote" not in self.done and self.note_id:
-            self.done.add("alaya_promote")
+        if "rosmontis_promote" not in self.done and self.note_id:
+            self.done.add("rosmontis_promote")
             return {
                 "content": "",
                 "tool_calls": [
-                    {"name": "alaya_promote", "arguments": {"note_id": self.note_id, "section": "trait"}}
+                    {"name": "rosmontis_promote", "arguments": {"note_id": self.note_id, "section": "trait"}}
                 ],
             }
 

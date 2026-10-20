@@ -25,7 +25,7 @@ from . import vec as V
 from .embed import Embedder
 from .llm import LLM
 
-log = logging.getLogger("alaya.write")
+log = logging.getLogger("rosmontis.write")
 
 
 @dataclass
@@ -246,15 +246,25 @@ def _project_extraction(
             out["noop"] += 1
         # 状态类事实 → 它驱动的那个槽（scope 归一 + slot_key），供下面的
         # state_changes 认领归属；NOOP 也记，指向已有的那条事实。
+        # 同时带上事实的**世界时间起点**（valid_from）：槽的时间基准是世界时间，
+        # 不是陈述时间——"2020 年我住广州"今天才补录时，槽必须落在 2020，
+        # 交给 _apply_state 的历史分支处理，不能用"现在"去关掉当前槽。
         slot_key = EX.STATE_PREDICATES.get(f.predicate)
         if slot_key and act.get("fact"):
-            state_fact[(IDS.normalize(f.subject), slot_key)] = act["fact"]
+            state_fact[(IDS.normalize(f.subject), slot_key)] = (act["fact"], act.get("valid_from"))
+        # 槽已经由事实驱动过一次（下面的 state_changes 会因"值没变"返回 False），
+        # 计数必须在这里收走，否则 states_changed 恒为 0——指标说谎比漏报更糟。
+        if act.get("state_applied"):
+            out["states_changed"] += 1
 
     for s in ext.state_changes:
         # 同一条 episode 抽出的 state_changes 往往就是上面那条事实的投影；
         # 有对应事实时把 fact id 带进槽，`correct()` 与 audit 才有线可查。
-        src = state_fact.get((IDS.normalize(s.scope), s.slot))
-        if _apply_state(conn, session_id, s, ent_cache, t_event, now, source_fact=src):
+        src, world_at = state_fact.get((IDS.normalize(s.scope), s.slot), (None, None))
+        # 世界时间不晚于陈述时间才用它：未来日期（"明天搬走"）按陈述时间记，
+        # 否则槽会落到未来、当前状态查询凭空查不到。
+        at = t_event if world_at is None else min(float(world_at), t_event)
+        if _apply_state(conn, session_id, s, ent_cache, at, now, source_fact=src):
             out["states_changed"] += 1
 
     out["edges_touched"] = _group_theme(cfg, conn, session_id, ext, ep_id, ent_cache, t_event, now)
@@ -338,6 +348,9 @@ def _resolve_fact(
         span = timeparse.parse(str(f.valid_from_text), now)
         if span:
             vfrom = span.start
+    # 状态槽的时间基准：世界时间优先，但不晚于陈述时间（未来日期按今天记，
+    # 否则槽会落到未来、当前状态查询凭空查不到）。
+    slot_at = min(float(vfrom), t_event)
 
     rows = conn.execute(
         """SELECT * FROM fact
@@ -367,11 +380,16 @@ def _resolve_fact(
         # 抽取只吐 facts、不吐 state_changes 时，槽只能由这里驱动。漏了这一步，
         # 槽会停在旧值上、source_fact 还指着刚被作废的事实——检索里的「当前状态」
         # 永远是老地址（真实 LLM 也不总记得吐 state_changes）。
-        if int(f.polarity) == 1:
-            _apply_state(
+        #
+        # `hist_end is not None` 说明这是**补录的历史事实**（新时刻早于旧事实起点）：
+        # 它只占一段历史区间，绝不能驱动当前槽，否则"2020 年我住广州"会把今天
+        # 的住址改成广州，还会让槽挂上一条已作废事实（audit 立刻报 stale_state）。
+        state_applied = False
+        if hist_end is None and int(f.polarity) == 1:
+            state_applied = _apply_state(
                 conn, session_id,
                 EX.StateCand(scope=f.subject, slot=EX.STATE_PREDICATES[f.predicate], value=f.obj),
-                ent_cache, t_event, now, source_fact=new_id,
+                ent_cache, slot_at, now, source_fact=new_id,
             )
         return {
             "action": "UPDATE",
@@ -379,6 +397,8 @@ def _resolve_fact(
             "superseded": [r["id"] for r in rows],
             "reason": f"{f.predicate} 发生变更",
             "predicate": f.predicate,
+            "valid_from": slot_at,
+            "state_applied": state_applied,
         }
 
     opposite = [r for r in same if int(r["polarity"]) != int(f.polarity)]
@@ -395,6 +415,7 @@ def _resolve_fact(
             "over": [r["id"] for r in opposite],
             "reason": "极性反转",
             "predicate": f.predicate,
+            "valid_from": slot_at,
         }
 
     new_id, inserted = _insert_fact(conn, session_id, subj_id, f, obj_ent, vfrom, ep_id, t_event, emb, embedder=embedder)
@@ -402,19 +423,22 @@ def _resolve_fact(
     # 确定性兜底：位置/工作/关系类事实直接驱动状态槽。
     # 不能指望 LLM 记得产出 state_changes——它经常忘，而槽是检索的主干，
     # 漏了比漏一条 fact 严重得多。「住在城东」本身就是 city=城东 的变更。
+    state_applied = False
     if f.predicate in EX.STATE_PREDICATES and int(f.polarity) == 1:
-        _apply_state(
+        state_applied = _apply_state(
             conn, session_id,
             EX.StateCand(scope=f.subject, slot=EX.STATE_PREDICATES[f.predicate], value=f.obj),
-            ent_cache, t_event, now, source_fact=new_id,
+            ent_cache, slot_at, now, source_fact=new_id,
         )
 
     if not inserted:
         # 事实已经在库里（同主语/谓词/客体/起点/极性）：报 EXISTS，不冒充 ADD。
         # 旧实现 INSERT OR IGNORE 之后照样返回 ADD，`added` 统计被灌水，
         # 上层看到"又记住了一条"其实什么都没变。
-        return {"action": "EXISTS", "fact": new_id, "predicate": f.predicate}
-    return {"action": "ADD", "fact": new_id, "predicate": f.predicate}
+        return {"action": "EXISTS", "fact": new_id, "predicate": f.predicate,
+                "valid_from": slot_at, "state_applied": state_applied}
+    return {"action": "ADD", "fact": new_id, "predicate": f.predicate,
+            "valid_from": slot_at, "state_applied": state_applied}
 
 
 def _supersede(conn, rows, vfrom: float, t_event: float, now: float) -> float | None:

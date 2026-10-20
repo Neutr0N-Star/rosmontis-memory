@@ -21,11 +21,11 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-import alaya  # noqa: E402
-from alaya import api  # noqa: E402
-from alaya.core import db as DB  # noqa: E402
-from alaya.harness import chat_with_tools, make_llm_callable, normalize_tool_calls  # noqa: E402
-from alaya.tools import dispatch, item_state, transition_item  # noqa: E402
+import rosmontis  # noqa: E402
+from rosmontis import api  # noqa: E402
+from rosmontis.core import db as DB  # noqa: E402
+from rosmontis.harness import chat_with_tools, make_llm_callable, normalize_tool_calls  # noqa: E402
+from rosmontis.tools import dispatch, item_state, transition_item  # noqa: E402
 
 TOOL_KEYS = {"ok", "id", "state", "from", "to", "reason"}
 
@@ -87,7 +87,7 @@ class ApiCase(unittest.TestCase):
     """公共测试基类：每个用例独立临时库，收尾时关句柄再删目录。"""
 
     def mk(self, tag: str, llm_callable=None, **cfg):
-        d = tempfile.mkdtemp(prefix=f"alaya_api_{tag}_")
+        d = tempfile.mkdtemp(prefix=f"rosmontis_api_{tag}_")
         db_path = os.path.join(d, "t.db")
         conf = {
             "db_path": db_path,
@@ -99,7 +99,7 @@ class ApiCase(unittest.TestCase):
         conf.update(cfg)
         if llm_callable is not None:
             conf["llm_callable"] = llm_callable
-        h = alaya.open(db_path, conf)
+        h = rosmontis.open(db_path, conf)
         h.mem.llm_hot = FakeExtractor()
         self.addCleanup(shutil.rmtree, d, True)
         self.addCleanup(h.close)
@@ -156,20 +156,20 @@ class TestPublicApi(ApiCase):
 
     def test_context_bad_budget_and_closed(self):
         h, _ = self.mk("bad")
-        with self.assertRaises(api.AlayaError) as cm:
+        with self.assertRaises(api.RosmontisError) as cm:
             h.context("u1", "c1", "x", budget=0)
         self.assertEqual(cm.exception.code, "invalid_argument")
-        with self.assertRaises(api.AlayaError):
+        with self.assertRaises(api.RosmontisError):
             h.context("", "c1", "x")
         h.close()
-        with self.assertRaises(api.AlayaError) as cm:
+        with self.assertRaises(api.RosmontisError) as cm:
             h.context("u1", "c1", "x")
         self.assertEqual(cm.exception.code, "closed")
-        self.assertFalse(api.AlayaError("x", "y").as_dict()["ok"])
+        self.assertFalse(api.RosmontisError("x", "y").as_dict()["ok"])
 
     def test_turn_empty_text_raises(self):
         h, _ = self.mk("empty")
-        with self.assertRaises(api.AlayaError) as cm:
+        with self.assertRaises(api.RosmontisError) as cm:
             h.turn("u1", "c1", "   ")
         self.assertEqual(cm.exception.code, "invalid_argument")
 
@@ -192,7 +192,7 @@ class TestToolsContract(ApiCase):
         args = {"what": kw.get("what", "他说他换工作了"), "noticed": kw.get("noticed", "说的时候像松了口气"),
                 "means": kw.get("means", "他可能想逃"), "next": kw.get("next", "下次别问好不好，问累不累"),
                 "topic": kw.get("topic", "工作")}
-        return dispatch(h.mem, "alaya_remember", args, "u1")
+        return dispatch(h.mem, "rosmontis_remember", args, "u1")
 
     def test_remember_payload_shape_and_gate(self):
         h, _ = self.mk("remember")
@@ -204,16 +204,16 @@ class TestToolsContract(ApiCase):
         self.assertEqual(full["from"], "new")
         self.assertEqual(full["to"], "note")
 
-        only_what = dispatch(h.mem, "alaya_remember", {"what": "今天下雨了"}, "u1")
+        only_what = dispatch(h.mem, "rosmontis_remember", {"what": "今天下雨了"}, "u1")
         self.assertTrue(only_what["ok"])
         self.assertEqual(only_what["state"], "inbox", "只有 what 的条目应由 gate 留在速记层")
 
     def test_promote_gate_decides(self):
         h, _ = self.mk("promote")
         ids = [self._remember(h, what=f"第 {i} 条判断，反复想到")["id"] for i in range(3)]
-        r1 = dispatch(h.mem, "alaya_promote", {"note_id": ids[0], "section": "trait"}, "u1")
-        r2 = dispatch(h.mem, "alaya_promote", {"note_id": ids[1], "section": "trait"}, "u1")
-        r3 = dispatch(h.mem, "alaya_promote", {"note_id": ids[2], "section": "trait"}, "u1")
+        r1 = dispatch(h.mem, "rosmontis_promote", {"note_id": ids[0], "section": "trait"}, "u1")
+        r2 = dispatch(h.mem, "rosmontis_promote", {"note_id": ids[1], "section": "trait"}, "u1")
+        r3 = dispatch(h.mem, "rosmontis_promote", {"note_id": ids[2], "section": "trait"}, "u1")
         self.assertEqual(set(r1.keys()), TOOL_KEYS)
         self.assertTrue(r1["ok"], r1["reason"])
         self.assertEqual(r1["state"], r1["to"], "成功时 state 必须等于 gate 判定的 to")
@@ -232,13 +232,13 @@ class TestToolsContract(ApiCase):
             "state_changes": [],
         })
         ep = h.mem.ingest("我喜欢猫", session_id="u1", t_event=1000.0)["episode_id"]
-        r_ep = dispatch(h.mem, "alaya_skip", {"item_id": ep, "reason": "不想提"}, "u1")
+        r_ep = dispatch(h.mem, "rosmontis_skip", {"item_id": ep, "reason": "不想提"}, "u1")
         self.assertTrue(r_ep["ok"])
         self.assertEqual(r_ep["state"], "muted")
         self.assertEqual(item_state(h.mem, ep)["state"], "muted")
 
         fact_id = h.mem.facts("u1")[0]["id"]
-        r_fa = dispatch(h.mem, "alaya_skip", {"item_id": fact_id, "reason": "不想提"}, "u1")
+        r_fa = dispatch(h.mem, "rosmontis_skip", {"item_id": fact_id, "reason": "不想提"}, "u1")
         self.assertEqual(set(r_fa.keys()), TOOL_KEYS)
         self.assertTrue(r_fa["ok"], r_fa["reason"])
         self.assertEqual(r_fa["state"], "muted")
@@ -249,10 +249,10 @@ class TestToolsContract(ApiCase):
 
     def test_skip_missing_and_failure_reason(self):
         h, _ = self.mk("skipmiss")
-        r = dispatch(h.mem, "alaya_skip", {"item_id": "ep_nope"}, "u1")
+        r = dispatch(h.mem, "rosmontis_skip", {"item_id": "ep_nope"}, "u1")
         self.assertFalse(r["ok"])
         self.assertIn("不存在", r["reason"])
-        r2 = dispatch(h.mem, "alaya_remember", {"what": "   "}, "u1")
+        r2 = dispatch(h.mem, "rosmontis_remember", {"what": "   "}, "u1")
         self.assertFalse(r2["ok"])
         self.assertIn("what", r2["reason"])
 
@@ -279,7 +279,7 @@ class TestHarnessContract(ApiCase):
         record = RecordingLLM([
             {
                 "content": "",
-                "tool_calls": [{"name": "alaya_remember", "arguments": {"what": "他说他今天很累", "next": "先问睡够没有"}}],
+                "tool_calls": [{"name": "rosmontis_remember", "arguments": {"what": "他说他今天很累", "next": "先问睡够没有"}}],
                 "usage": {"prompt_tokens": 180, "completion_tokens": 64},
                 "finish_reason": "tool_calls",
             },
@@ -305,7 +305,7 @@ class TestHarnessContract(ApiCase):
         self.assertEqual(r["usage"]["completion_tokens"], 82)
         self.assertEqual(len(r["tools_called"]), 1)
         tool = r["tools_called"][0]
-        self.assertEqual(tool["tool"], "alaya_remember")
+        self.assertEqual(tool["tool"], "rosmontis_remember")
         self.assertTrue(tool["ok"], tool["reason"])
         self.assertEqual(tool["state"], "note")
         self.assertTrue(tool["tool_call_id"].startswith("call_"))
@@ -322,7 +322,7 @@ class TestHarnessContract(ApiCase):
         assistant = [m for m in second if m.get("role") == "assistant" and m.get("tool_calls")][-1]
         call_id = assistant["tool_calls"][0]["id"]
         self.assertTrue(call_id)
-        self.assertEqual(assistant["tool_calls"][0]["function"]["name"], "alaya_remember")
+        self.assertEqual(assistant["tool_calls"][0]["function"]["name"], "rosmontis_remember")
         tool_msgs = [m for m in second if m.get("role") == "tool"]
         self.assertEqual(len(tool_msgs), 1)
         self.assertEqual(tool_msgs[0]["tool_call_id"], call_id)
@@ -346,9 +346,9 @@ class TestHarnessContract(ApiCase):
         openai_raw = [{
             "id": "call_x",
             "type": "function",
-            "function": {"name": "alaya_recall", "arguments": '{"query": "猫"}'},
+            "function": {"name": "rosmontis_recall", "arguments": '{"query": "猫"}'},
         }]
-        flat = [{"name": "alaya_skip", "arguments": {"item_id": "ep_1"}}]
+        flat = [{"name": "rosmontis_skip", "arguments": {"item_id": "ep_1"}}]
         n1 = normalize_tool_calls(openai_raw)
         n2 = normalize_tool_calls(flat)
         self.assertEqual(n1[0]["id"], "call_x")
@@ -402,7 +402,7 @@ class TestOpenAICompatiblePassthrough(ApiCase):
                         "id": "call_abc",
                         "type": "function",
                         "function": {
-                            "name": "alaya_remember",
+                            "name": "rosmontis_remember",
                             "arguments": json.dumps(
                                 {"what": "透传测试：他今天没吃饭", "next": "先问饿不饿，别问想吃什么"},
                                 ensure_ascii=False,
@@ -434,7 +434,7 @@ class TestOpenAICompatiblePassthrough(ApiCase):
             return make_llm_callable(fake_llm, clean=lambda s: s.strip(), max_tokens=400)(messages, tools)
 
         h, db_path = self.mk("openai", llm_callable=llm_callable)
-        with mock.patch("alaya.harness.urllib.request.urlopen", side_effect=fake_urlopen):
+        with mock.patch("rosmontis.harness.urllib.request.urlopen", side_effect=fake_urlopen):
             r = h.turn("u1", "c1", "我今天没吃饭")
 
         self.assertEqual(r["reply"], "记好了。")
@@ -442,7 +442,7 @@ class TestOpenAICompatiblePassthrough(ApiCase):
         self.assertEqual(r["finish_reason"], "stop")
         self.assertEqual(r["usage"]["prompt_tokens"], 240)
         self.assertEqual(len(r["tools_called"]), 1)
-        self.assertEqual(r["tools_called"][0]["tool"], "alaya_remember")
+        self.assertEqual(r["tools_called"][0]["tool"], "rosmontis_remember")
         self.assertTrue(r["tools_called"][0]["ok"], r["tools_called"][0]["reason"])
         self.assertEqual(r["tools_called"][0]["state"], "note")
 
@@ -457,7 +457,7 @@ class TestOpenAICompatiblePassthrough(ApiCase):
         last = payloads[1]["messages"][-1]
         self.assertEqual(last["role"], "tool")
         self.assertEqual(last["tool_call_id"], "call_abc")
-        self.assertEqual(last["name"], "alaya_remember")
+        self.assertEqual(last["name"], "rosmontis_remember")
 
         with DB.reader(db_path) as conn:
             rows = conn.execute("SELECT text FROM episode WHERE source='notebook'").fetchall()
@@ -490,10 +490,10 @@ class TestOpenAICompatiblePassthrough(ApiCase):
                 "tool_calls": [{
                     "id": "call_1",
                     "type": "function",
-                    "function": {"name": "alaya_recall", "arguments": "{}"},
+                    "function": {"name": "rosmontis_recall", "arguments": "{}"},
                 }],
             },
-            {"role": "tool", "tool_call_id": "call_1", "name": "alaya_recall", "content": "成功：found=True"},
+            {"role": "tool", "tool_call_id": "call_1", "name": "rosmontis_recall", "content": "成功：found=True"},
         ]
         resp = call(messages, [{"type": "function"}])
         self.assertEqual(resp["tool_calls"], [])
@@ -502,7 +502,7 @@ class TestOpenAICompatiblePassthrough(ApiCase):
         self.assertEqual(resp["content"], "纯文本回复")
         self.assertIn("系统提示", llm.seen[0])
         self.assertIn("（工具结果）成功", llm.seen[1])
-        self.assertIn("alaya_recall", llm.seen[1])
+        self.assertIn("rosmontis_recall", llm.seen[1])
 
     def test_chat_with_tools_quiet_degrade(self):
         class NoToolsLLM:
@@ -569,21 +569,21 @@ class TestFourHooks(ApiCase):
         finally:
             gate.set()
             del h.harness.sleep
-        with self.assertRaises(api.AlayaError) as cm:
+        with self.assertRaises(api.RosmontisError) as cm:
             h.job("job_nope")
         self.assertEqual(cm.exception.code, "not_found")
 
 
 class TestPackageSurface(unittest.TestCase):
     def test_lazy_exports(self):
-        self.assertEqual(alaya.api_version, "1")
+        self.assertEqual(rosmontis.api_version, "1")
         self.assertEqual(api.__version__, "1")
-        self.assertTrue(callable(alaya.__getattr__("open")))
-        self.assertTrue(callable(alaya.__getattr__("Harness")))
-        self.assertTrue(callable(alaya.__getattr__("dispatch")))
-        self.assertEqual(len(alaya.__getattr__("TOOLS")), 5)
+        self.assertTrue(callable(rosmontis.__getattr__("open")))
+        self.assertTrue(callable(rosmontis.__getattr__("Harness")))
+        self.assertTrue(callable(rosmontis.__getattr__("dispatch")))
+        self.assertEqual(len(rosmontis.__getattr__("TOOLS")), 5)
         with self.assertRaises(AttributeError):
-            alaya.__getattr__("nope")
+            rosmontis.__getattr__("nope")
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 ﻿"""统一写入管线 / 状态机 / schema v3 迁移的验收测试。
 
 运行：`PYTHONIOENCODING=utf-8 python tests/test_items.py`
-不依赖 Ollama / 网络；迁移测试只用临时副本库，真库 `alaya.db` 全程只读。
+不依赖 Ollama / 网络；迁移测试只用临时副本库，真库 `rosmontis.db` 全程只读。
 
 覆盖（对应 A2 M1/M3/M5、I6/I9/I10/I12）：
 - 写入单点：`INSERT INTO episode` 只允许出现在 core/pipeline.py（其它线遗留的
@@ -29,15 +29,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from alaya import Config  # noqa: E402
-from alaya.core import db as DB  # noqa: E402
-from alaya.core import gate as GATE  # noqa: E402
-from alaya.core import item as IT  # noqa: E402
-from alaya.core import pipeline as TR  # noqa: E402
-from alaya.core import write as WR  # noqa: E402
-from alaya.core.memory import Memory  # noqa: E402
+from rosmontis import Config  # noqa: E402
+from rosmontis.core import db as DB  # noqa: E402
+from rosmontis.core import gate as GATE  # noqa: E402
+from rosmontis.core import item as IT  # noqa: E402
+from rosmontis.core import pipeline as TR  # noqa: E402
+from rosmontis.core import write as WR  # noqa: E402
+from rosmontis.core.memory import Memory  # noqa: E402
 
-CORE_DIR = ROOT / "alaya" / "core"
+CORE_DIR = ROOT / "rosmontis" / "core"
 
 # 不在本工作线写入范围的遗留直写点（报告已点名，等工作线收口）
 LEGACY_EPISODE_INSERTERS = {"dream.py", "forget.py"}
@@ -73,7 +73,7 @@ class FakeLLM:
 
 
 def mk(tag: str = "items") -> tuple[Memory, FakeLLM, str]:
-    d = tempfile.mkdtemp(prefix=f"alaya_{tag}_")
+    d = tempfile.mkdtemp(prefix=f"rosmontis_{tag}_")
     cfg = Config(
         db_path=os.path.join(d, "t.db"),
         embed_provider="hash",
@@ -514,7 +514,7 @@ def make_v2_db(path: str) -> None:
 
 class TestMigration(unittest.TestCase):
     def setUp(self):
-        self.dir = tempfile.mkdtemp(prefix="alaya_mig_")
+        self.dir = tempfile.mkdtemp(prefix="rosmontis_mig_")
         self.path = os.path.join(self.dir, "v2.db")
         make_v2_db(self.path)
 
@@ -603,13 +603,13 @@ class TestMigration(unittest.TestCase):
         finally:
             conn.close()
 
-    @unittest.skipUnless((ROOT / "alaya.db").exists(), "真库 alaya.db 不在，跳过副本实测")
+    @unittest.skipUnless((ROOT / "rosmontis.db").exists(), "真库 rosmontis.db 不在，跳过副本实测")
     def test_real_db_copy_migrates(self):
         """真库只读备份 → 副本上跑迁移（真库一个字节都不写）。"""
         import sqlite3
 
-        real = str(ROOT / "alaya.db")
-        copy = os.path.join(self.dir, "alaya_copy.db")
+        real = str(ROOT / "rosmontis.db")
+        copy = os.path.join(self.dir, "rosmontis_copy.db")
         src = sqlite3.connect(f"file:{real.replace(os.sep, '/')}?mode=ro", uri=True)
         dst = sqlite3.connect(copy)
         try:

@@ -2,16 +2,16 @@
 
 设计原则（契约见 `docs/15-交付蓝图与模块契约.md` §3.6、`docs/17-接入形态与接口方案.md` §8）：
 
-- **代码与模型分离**：`pip install alaya-memory` 只装核心；模型是独立资产。
+- **代码与模型分离**：`pip install rosmontis-memory` 只装核心；模型是独立资产。
 - **断点续传 + 重试 + 校验**：`.part` 临时文件、最多 3 次重试、SHA-256 校验通过才替换。
 - **失败不破坏已有模型**：下载/校验失败时旧文件原样保留。
-- **可指向外部目录**：`ALAYA_MODEL_DIR` 或 `--dir`。
+- **可指向外部目录**：`ROSMONTIS_MODEL_DIR` 或 `--dir`。
 
-模型清单在 `MODELS`；URL 指向发布时的固定版本。国内镜像可用 `--mirror` 或 `ALAYA_MODEL_MIRROR`。
+模型清单在 `MODELS`；URL 指向发布时的固定版本。国内镜像可用 `--mirror` 或 `ROSMONTIS_MODEL_MIRROR`。
 
-用法（CLI 侧见 `alaya models ...`）：
+用法（CLI 侧见 `rosmontis models ...`）：
 
-    from alaya import models
+    from rosmontis import models
     models.install("bge-small-zh-v1.5")
     p = models.resolve("bge-small-zh-v1.5")   # {"dir","onnx","tokenizer","dim"}
 """
@@ -67,7 +67,7 @@ class ModelError(RuntimeError):
 
 
 def models_root(override: str | None = None) -> Path:
-    p = override or os.environ.get("ALAYA_MODEL_DIR") or os.path.join(Path.home(), ".alaya", "models")
+    p = override or os.environ.get("ROSMONTIS_MODEL_DIR") or os.path.join(Path.home(), ".rosmontis", "models")
     return Path(p)
 
 
@@ -111,7 +111,7 @@ def resolve(name: str = DEFAULT_MODEL, root: str | None = None) -> dict:
     m = read_manifest(name, root)
     if not m or not m.get("complete"):
         raise ModelError(
-            f"模型 {name} 未安装。运行：alaya models install {name}"
+            f"模型 {name} 未安装。运行：rosmontis models install {name}"
             f"（目录：{models_root(root)}）"
         )
     spec = MODELS.get(name, {})
@@ -135,7 +135,7 @@ def _sha256(path: Path, chunk: int = 1 << 20) -> str:
 
 
 def _url_for(rel: str, repo: str, mirror: str | None) -> str:
-    base = (mirror or os.environ.get("ALAYA_MODEL_MIRROR") or HF).rstrip("/")
+    base = (mirror or os.environ.get("ROSMONTIS_MODEL_MIRROR") or HF).rstrip("/")
     if base in (HF, HF_MIRROR):
         return f"{base}/{repo}/resolve/main/{rel}"
     return f"{base.rstrip('/')}/{repo}/resolve/main/{rel}"

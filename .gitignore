@@ -5,6 +5,8 @@ node_modules/
 __pycache__/
 *.pyc
 demo.db*
+rosmontis.db*
+# 改名前的旧库文件名：本地仍有存量数据文件，必须继续忽略，否则会被误提交
 alaya.db*
 .review/
 .env

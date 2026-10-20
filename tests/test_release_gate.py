@@ -6,8 +6,8 @@
 运行：
     PYTHONIOENCODING=utf-8 python -m unittest tests.test_release_gate -v
 
-离线：`ALAYA_EMBED=hash` + 假 LLM，不依赖 Ollama / 网络。
-本文件只读 `alaya/`，不改任何业务代码——红了说明实现有问题，不是测试写错了。
+离线：`ROSMONTIS_EMBED=hash` + 假 LLM，不依赖 Ollama / 网络。
+本文件只读 `rosmontis/`，不改任何业务代码——红了说明实现有问题，不是测试写错了。
 """
 
 from __future__ import annotations
@@ -28,16 +28,16 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-import alaya  # noqa: E402
-from alaya import api as API  # noqa: E402
-from alaya import Config  # noqa: E402
-from alaya.core import db as DB  # noqa: E402
-from alaya.core import pipeline as TR  # noqa: E402
-from alaya.core import recall as RC  # noqa: E402
-from alaya.core import write as WR  # noqa: E402
-from alaya.core.memory import Memory  # noqa: E402
+import rosmontis  # noqa: E402
+from rosmontis import api as API  # noqa: E402
+from rosmontis import Config  # noqa: E402
+from rosmontis.core import db as DB  # noqa: E402
+from rosmontis.core import pipeline as TR  # noqa: E402
+from rosmontis.core import recall as RC  # noqa: E402
+from rosmontis.core import write as WR  # noqa: E402
+from rosmontis.core.memory import Memory  # noqa: E402
 
-CORE_DIR = ROOT / "alaya" / "core"
+CORE_DIR = ROOT / "rosmontis" / "core"
 
 # `(?='*' OR session_id=?)` 这种"用哨兵值绕开动态 SQL"的写法是有意的历史折中，
 # 但它让索引选择性消失、也让 as_of 类查询难审计。本轮只锁住**不新增**（棘轮）：
@@ -84,7 +84,7 @@ class FakeLLM:
 class StubEmbedder:
     """语义模式的假向量器：只为验证"向量身份"判据，不做真实语义。
 
-    为什么不能用 `ALAYA_EMBED=hash`：hash 是降级通道，写路径刻意不落伪向量
+    为什么不能用 `ROSMONTIS_EMBED=hash`：hash 是降级通道，写路径刻意不落伪向量
     （embedding 留 NULL）。而 A-5 要复现的正是"旧身份**有**向量、换模型后不重算"，
     所以需要一个 degraded=False、vector_mode()=='semantic' 的替身。
     """
@@ -148,7 +148,7 @@ class GateCase(unittest.TestCase):
     """每个用例一个临时库；收尾按 LIFO 等 enrich、关连接、删目录。"""
 
     def mk(self, tag: str, **cfg) -> tuple[Memory, FakeLLM, str]:
-        d = tempfile.mkdtemp(prefix=f"alaya_gate_{tag}_")
+        d = tempfile.mkdtemp(prefix=f"rosmontis_gate_{tag}_")
         conf = {
             "db_path": os.path.join(d, "t.db"),
             "embed_provider": "hash",
@@ -423,16 +423,16 @@ class TestIdentityRecovery(GateCase):
 # ── A-7 未知 provider 启动即失败 + 降级信号外露 ────────────────
 class TestProviderGate(unittest.TestCase):
     def setUp(self):
-        self.dir = tempfile.mkdtemp(prefix="alaya_gate_a7_")
+        self.dir = tempfile.mkdtemp(prefix="rosmontis_gate_a7_")
         self.db = os.path.join(self.dir, "t.db")
         self.addCleanup(shutil.rmtree, self.dir, True)
         self.addCleanup(DB.close_thread_conns)
 
     def test_unknown_provider_fails_fast(self):
-        """ALAYA_EMBED=local → alaya.open() 抛错，code 为 embed_provider_unavailable。"""
-        with mock.patch.dict(os.environ, {"ALAYA_EMBED": "local"}):
-            with self.assertRaises(API.AlayaError) as cm:
-                alaya.open(self.db, {"llm_hot": "rule", "llm_deep": "rule", "log_level": "ERROR"})
+        """ROSMONTIS_EMBED=local → rosmontis.open() 抛错，code 为 embed_provider_unavailable。"""
+        with mock.patch.dict(os.environ, {"ROSMONTIS_EMBED": "local"}):
+            with self.assertRaises(API.RosmontisError) as cm:
+                rosmontis.open(self.db, {"llm_hot": "rule", "llm_deep": "rule", "log_level": "ERROR"})
         self.assertEqual(
             cm.exception.code, "embed_provider_unavailable",
             f"未知 provider 被静默换成 hash，而不是开不起来的显式失败：{cm.exception.code}",
@@ -440,9 +440,9 @@ class TestProviderGate(unittest.TestCase):
         self.assertIn("local", cm.exception.message, "报错要带原值，否则用户不知道是哪来的配置")
 
     def test_hash_provider_reports_degraded_in_context(self):
-        """ALAYA_EMBED=hash → 正常打开，context() 的 degraded=True 且 degraded_reason 非空。"""
-        with mock.patch.dict(os.environ, {"ALAYA_EMBED": "hash"}):
-            h = alaya.open(self.db, {"llm_hot": "rule", "llm_deep": "rule", "log_level": "ERROR"})
+        """ROSMONTIS_EMBED=hash → 正常打开，context() 的 degraded=True 且 degraded_reason 非空。"""
+        with mock.patch.dict(os.environ, {"ROSMONTIS_EMBED": "hash"}):
+            h = rosmontis.open(self.db, {"llm_hot": "rule", "llm_deep": "rule", "log_level": "ERROR"})
             self.addCleanup(h.close)
         ctx = h.context("u1", "c1", "随便问一句", budget=200)
 
@@ -463,7 +463,7 @@ class TestBackupIntegrity(GateCase):
         env = dict(os.environ)
         env["PYTHONIOENCODING"] = "utf-8"
         return subprocess.run(
-            [sys.executable, "-m", "alaya", "backup", *args],
+            [sys.executable, "-m", "rosmontis", "backup", *args],
             cwd=str(ROOT),
             capture_output=True,
             text=True,
@@ -549,7 +549,7 @@ class TestReleaseHygiene(unittest.TestCase):
     _SID_STAR = re.compile(r"\?=\s*'\*'\s+OR")
 
     def test_no_new_sid_star_or_antipattern(self):
-        """`alaya/core/` 不再**新增** `(?='*' OR ...)` 反模式（audit.py 本轮白名单）。
+        """`rosmontis/core/` 不再**新增** `(?='*' OR ...)` 反模式（audit.py 本轮白名单）。
 
         棘轮而非归零：规格没把清理排进本批，断言 0 会让门禁永久红。
         真清理时同步下调 SID_STAR_BASELINE。
@@ -569,7 +569,7 @@ class TestReleaseHygiene(unittest.TestCase):
         )
 
     def test_version_consistency_is_covered_elsewhere(self):
-        """版本三处一致（pyproject / alaya.__version__ / openapi.json）已有测试覆盖。
+        """版本三处一致（pyproject / rosmontis.__version__ / openapi.json）已有测试覆盖。
 
         `tests/test_contract.py:27-31` 已逐项断言，这里不重复造第二条——
         重复的断言只会让"改了一处忘了另一处"时出现两个红点。

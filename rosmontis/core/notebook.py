@@ -24,7 +24,7 @@ from . import persona as PER
 from . import pipeline as TR
 from . import promotion as PR
 
-log = logging.getLogger("alaya.notebook")
+log = logging.getLogger("rosmontis.notebook")
 
 # 人设改动的旧闸常量（判定已收口到 gate，这里保留常量名给外部引用）
 MAX_PROMOTIONS_PER_SESSION = gate.MAX_PROMOTIONS_PER_SESSION

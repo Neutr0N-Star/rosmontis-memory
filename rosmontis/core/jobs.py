@@ -25,7 +25,7 @@ import time
 
 from . import db as DB
 
-log = logging.getLogger("alaya.jobs")
+log = logging.getLogger("rosmontis.jobs")
 
 # ── job 常量 ──────────────────────────────────────────────────
 STATUS_PENDING = "pending"
@@ -92,12 +92,12 @@ def _as_job(row: dict) -> dict:
 
 
 def idle_timeout_from_env(default: float = DEFAULT_IDLE_TIMEOUT) -> float:
-    """ALAYA_IDLE_TIMEOUT（秒）。Contract 里叫 `Config.idle_timeout_s`，本轮不越权改 config.py。"""
-    return max(1.0, _env_float("ALAYA_IDLE_TIMEOUT", default))
+    """ROSMONTIS_IDLE_TIMEOUT（秒）。Contract 里叫 `Config.idle_timeout_s`，本轮不越权改 config.py。"""
+    return max(1.0, _env_float("ROSMONTIS_IDLE_TIMEOUT", default))
 
 
 def idempotency_ttl_from_env(default: float = DEFAULT_IDEMPOTENCY_TTL) -> float:
-    return max(1.0, _env_float("ALAYA_IDEMPOTENCY_TTL", default))
+    return max(1.0, _env_float("ROSMONTIS_IDEMPOTENCY_TTL", default))
 
 
 def _ensure_db(cfg) -> None:

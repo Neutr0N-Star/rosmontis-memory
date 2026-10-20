@@ -18,7 +18,7 @@ from . import db as DB
 from . import item as IT
 from . import promotion as PR
 
-log = logging.getLogger("alaya.gate")
+log = logging.getLogger("rosmontis.gate")
 
 # 契约版本：episode.gate_version 与 item_state_log.gate_json 都记它
 GATE_VERSION = "3.0.0"

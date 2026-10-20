@@ -1,9 +1,9 @@
-"""Alaya 稳定公共 API（v1）。
+"""Rosmontis 稳定公共 API（v1）。
 
 宿主只需要认识这一层：
 
-    import alaya
-    h = alaya.open("alaya.db", {"llm_callable": my_llm})
+    import rosmontis
+    h = rosmontis.open("rosmontis.db", {"llm_callable": my_llm})
     h.wake("u1", "c1")
     ctx = h.context("u1", "c1", "他最近怎么样", budget=600)   # 纯函数：不写库、不超预算
     r = h.turn("u1", "c1", "我今天有点累", history=上一轮 messages)
@@ -33,7 +33,7 @@ WS-A 的 schema/gate 就位；这一点在 `docs/_wip/A7-接口实现报告.md` 
 
 错误形态
 --------
-方法出错抛 `AlayaError`（别名 `ApiError`）：`.code` / `.message` / `.retryable`，
+方法出错抛 `RosmontisError`（别名 `ApiError`）：`.code` / `.message` / `.retryable`，
 `.as_dict()` 给出 `{"ok": False, "data": None, "error": {...}}` 的统一信封。
 """
 
@@ -51,15 +51,15 @@ from .core import db as DB
 from .harness import Harness, LLMUnavailableError, build_context as harness_build_context
 from .tools import dispatch, item_state, transition_item
 
-log = logging.getLogger("alaya.api")
+log = logging.getLogger("rosmontis.api")
 
 __version__ = "1"
-__all__ = ["open", "Handle", "AlayaError", "ApiError", "__version__"]
+__all__ = ["open", "Handle", "RosmontisError", "ApiError", "__version__"]
 
 
-# 错误类型定义挪到 alaya/errors.py（core 也要能在故障现场抛它，反向 import 会成环），
-# 这里原样再导出，`alaya.api.AlayaError` / `alaya.AlayaError` 的身份不变。
-from .errors import AlayaError, ApiError  # noqa: E402
+# 错误类型定义挪到 rosmontis/errors.py（core 也要能在故障现场抛它，反向 import 会成环），
+# 这里原样再导出，`rosmontis.api.RosmontisError` / `rosmontis.RosmontisError` 的身份不变。
+from .errors import RosmontisError, ApiError  # noqa: E402
 
 _CONFIG_FIELDS = {f.name for f in dataclasses.fields(Config)}
 _HANDLE_OPTIONS = (
@@ -74,7 +74,7 @@ _HANDLE_OPTIONS = (
 
 
 class Handle:
-    """一个打开的 Alaya 记忆空间句柄。用 `alaya.open()` 创建。"""
+    """一个打开的 Rosmontis 记忆空间句柄。用 `rosmontis.open()` 创建。"""
 
     def __init__(
         self,
@@ -146,9 +146,9 @@ class Handle:
             try:
                 budget = int(budget)
             except (TypeError, ValueError):
-                raise AlayaError("invalid_argument", "budget 必须是整数") from None
+                raise RosmontisError("invalid_argument", "budget 必须是整数") from None
             if budget <= 0:
-                raise AlayaError("invalid_argument", "budget 必须大于 0")
+                raise RosmontisError("invalid_argument", "budget 必须大于 0")
 
         ctx = harness_build_context(self._harness.mem, query or "", sid, budget, pure=True)
         return {
@@ -188,16 +188,16 @@ class Handle:
         self._ensure_open()
         sid = _session(space, conversation)
         if not (text or "").strip():
-            raise AlayaError("invalid_argument", "text 不能为空")
+            raise RosmontisError("invalid_argument", "text 不能为空")
         self._ensure_woken(sid)
         try:
             r = self._harness.turn(text, sid, history=history, extra_system=extra_system)
         except ValueError as e:
-            raise AlayaError("invalid_argument", str(e)) from None
+            raise RosmontisError("invalid_argument", str(e)) from None
         except LLMUnavailableError as e:
-            raise AlayaError("llm_unavailable", f"模型没给出回复：{e}", retryable=True) from None
+            raise RosmontisError("llm_unavailable", f"模型没给出回复：{e}", retryable=True) from None
         except RuntimeError as e:
-            raise AlayaError("llm_unavailable", f"模型没给出回复：{e}", retryable=True) from None
+            raise RosmontisError("llm_unavailable", f"模型没给出回复：{e}", retryable=True) from None
         return {"ok": True, "space": space, "conversation": conversation, "session_id": sid, **r}
 
     def observe(self, space: str, conversation: str, user_text: str, assistant_text: str) -> dict:
@@ -207,7 +207,7 @@ class Handle:
         u = (user_text or "").strip()
         a = (assistant_text or "").strip()
         if not u and not a:
-            raise AlayaError("invalid_argument", "user_text 与 assistant_text 至少给一个")
+            raise RosmontisError("invalid_argument", "user_text 与 assistant_text 至少给一个")
 
         key = (sid, u, a)
         now = time.time()
@@ -275,7 +275,7 @@ class Handle:
             self._jobs[job_id] = job
             self._settle_by_sid[sid] = job
 
-        t = threading.Thread(target=self._settle_worker, args=(job,), daemon=True, name=f"alaya-settle-{job_id[:8]}")
+        t = threading.Thread(target=self._settle_worker, args=(job,), daemon=True, name=f"rosmontis-settle-{job_id[:8]}")
         job["thread"] = t
         t.start()
         return {
@@ -309,7 +309,7 @@ class Handle:
         with self._lock:
             job = self._jobs.get(job_id)
             if job is None:
-                raise AlayaError("not_found", f"任务不存在：{job_id}")
+                raise RosmontisError("not_found", f"任务不存在：{job_id}")
             return _public_job(job)
 
     def wait(self, job_id: str, timeout: float = 60.0) -> dict:
@@ -319,11 +319,11 @@ class Handle:
             with self._lock:
                 job = self._jobs.get(job_id)
                 if job is None:
-                    raise AlayaError("not_found", f"任务不存在：{job_id}")
+                    raise RosmontisError("not_found", f"任务不存在：{job_id}")
                 if job["state"] != "running":
                     return _public_job(job)
             if time.time() >= deadline:
-                raise AlayaError("timeout", f"任务 {job_id} 在 {timeout}s 内未结束", retryable=True)
+                raise RosmontisError("timeout", f"任务 {job_id} 在 {timeout}s 内未结束", retryable=True)
             time.sleep(0.02)
 
     # ── 工具（高级入口：宿主自己管循环时直接用）──────────
@@ -338,7 +338,7 @@ class Handle:
         self._ensure_open()
         d = item_state(self._harness.mem, item_id)
         if d is None:
-            raise AlayaError("not_found", f"条目不存在：{item_id}")
+            raise RosmontisError("not_found", f"条目不存在：{item_id}")
         return {"ok": True, **d}
 
     def transition(self, item_id: str, action: str, *, target: str = "", reason: str = "", actor: str = "system") -> dict:
@@ -358,7 +358,7 @@ class Handle:
         try:
             result = self._harness.sleep(sid)
         except Exception as e:
-            raise AlayaError("settle_failed", f"{type(e).__name__}: {e}", retryable=True) from None
+            raise RosmontisError("settle_failed", f"{type(e).__name__}: {e}", retryable=True) from None
         return {"ok": True, "space": space, "conversation": conversation,
                 "session_id": sid, "result": result}
 
@@ -407,7 +407,7 @@ class Handle:
     # ── 内部 ──────────────────────────────────────────────
     def _ensure_open(self) -> None:
         if self._closed:
-            raise AlayaError("closed", "handle 已关闭", retryable=False)
+            raise RosmontisError("closed", "handle 已关闭", retryable=False)
 
     def _ensure_woken(self, sid: str) -> None:
         if sid in self._woken:
@@ -421,9 +421,9 @@ def _session(space: str, conversation: str) -> str:
     """space → 底层 session_id。v1 用 space 作为记忆空间（会话间共享）。"""
     s = (space or "").strip()
     if not s:
-        raise AlayaError("invalid_argument", "space 不能为空")
+        raise RosmontisError("invalid_argument", "space 不能为空")
     if s == "*":
-        raise AlayaError("invalid_argument", "space 不能是 *（内部保留）")
+        raise RosmontisError("invalid_argument", "space 不能是 *（内部保留）")
     return s
 
 
@@ -451,7 +451,7 @@ def open(db_path: str, config: dict | None = None, *, migrate: str | None = None
 
         llm_callable / llm   宿主模型回调：`(messages, tools) -> dict`
                              （dict 需含 content 或 tool_calls；未配置时 turn 抛
-                              `AlayaError("llm_unavailable", retryable=True)`）
+                              `RosmontisError("llm_unavailable", retryable=True)`）
         system_prompt        本体 system 提示
         auto_tick            是否每轮后台节拍（默认 False，交给调度器）
         memory_budget        每轮检索 token 预算
@@ -461,12 +461,12 @@ def open(db_path: str, config: dict | None = None, *, migrate: str | None = None
 
     `migrate`（P1-3）：
       - `"auto"`（默认）：需要时单事务迁移；迁移前自动做带时间戳的 `.bak` 备份；
-      - `"never"`：版本不匹配直接抛 `AlayaError("migration_required")`，绝不改库；
+      - `"never"`：版本不匹配直接抛 `RosmontisError("migration_required")`，绝不改库；
       - `"dry_run"`：不迁移、不打开 Handle，返回一份迁移计划 dict：
         `{"ok","dry_run","db_path","exists","current_version","target_version",
           "needs_migration","will_backup","backup_path","actions"}`。
 
-    例：`alaya.open("alaya.db", {"embed_provider": "hash", "llm_hot": "rule",
+    例：`rosmontis.open("rosmontis.db", {"embed_provider": "hash", "llm_hot": "rule",
                                   "llm_callable": fake})`
     """
     if isinstance(db_path, Config):
@@ -475,32 +475,32 @@ def open(db_path: str, config: dict | None = None, *, migrate: str | None = None
         opts: dict = {}
     else:
         if not isinstance(db_path, (str, bytes)) or not str(db_path).strip():
-            raise AlayaError("invalid_argument", "db_path 不能为空")
+            raise RosmontisError("invalid_argument", "db_path 不能为空")
         opts = dict(config or {}) if isinstance(config, dict) else {}
         if config is not None and not isinstance(config, dict):
-            raise AlayaError("invalid_argument", "config 必须是 dict 或 None")
+            raise RosmontisError("invalid_argument", "config 必须是 dict 或 None")
         cfg_kwargs = {k: v for k, v in opts.items() if k in _CONFIG_FIELDS and v is not None}
         cfg_kwargs["db_path"] = str(db_path)
         try:
             cfg = Config(**cfg_kwargs)
         except Exception as e:
-            raise AlayaError("invalid_argument", f"配置不合法：{type(e).__name__}: {e}") from None
+            raise RosmontisError("invalid_argument", f"配置不合法：{type(e).__name__}: {e}") from None
 
     # ── 迁移策略（P1-3）────────────────────────────────────
     mode = (migrate if migrate is not None else opts.get("migrate", "auto"))
     mode = str(mode or "auto").strip().lower()
     if mode not in ("auto", "never", "dry_run"):
-        raise AlayaError("invalid_argument", "migrate 只能是 auto / never / dry_run")
+        raise RosmontisError("invalid_argument", "migrate 只能是 auto / never / dry_run")
     try:
         if mode == "dry_run":
             return DB.migration_plan(cfg.db_path)
         DB.init_db(cfg.db_path, migrate=mode)
     except DB.SchemaVersionError as e:
-        raise AlayaError("schema_too_new", str(e), retryable=False) from None
+        raise RosmontisError("schema_too_new", str(e), retryable=False) from None
     except DB.MigrationRequiredError as e:
-        raise AlayaError("migration_required", str(e), retryable=False) from None
+        raise RosmontisError("migration_required", str(e), retryable=False) from None
     except DB.BackupError as e:
-        raise AlayaError("migration_backup_failed", str(e), retryable=False) from None
+        raise RosmontisError("migration_backup_failed", str(e), retryable=False) from None
 
     handle_opts: dict = {k: opts.get(k) for k in _HANDLE_OPTIONS if k in opts}
     llm = handle_opts.pop("llm_callable", None) or handle_opts.pop("llm", None)
@@ -514,7 +514,7 @@ def open(db_path: str, config: dict | None = None, *, migrate: str | None = None
             max_tool_rounds=handle_opts.get("max_tool_rounds"),
             observe_window=handle_opts.get("observe_window", 300.0),
         )
-    except AlayaError:
+    except RosmontisError:
         raise
     except Exception as e:
-        raise AlayaError("open_failed", f"打开记忆空间失败：{type(e).__name__}: {e}", retryable=True) from None
+        raise RosmontisError("open_failed", f"打开记忆空间失败：{type(e).__name__}: {e}", retryable=True) from None

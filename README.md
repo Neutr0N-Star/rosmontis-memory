@@ -1,8 +1,8 @@
-# 藏识 Alaya
+# 藏识 Rosmontis
 
 长期陪伴 AI 的**记忆后端**。给你自己的前端 / agent 提供「记得住、会遗忘、会成长」的记忆能力。
 
-> **English**: Alaya is a local-first memory backend for long-lived companion AI. It keeps a layered,
+> **English**: Rosmontis is a local-first memory backend for long-lived companion AI. It keeps a layered,
 > time-aware model of a person (episodes → entities → facts → current state), injects memory into
 > prompts under a hard token budget, and consolidates what matters on a schedule. Ship it as a Python
 > library or a loopback HTTP service; bring your own frontend and model.
@@ -14,7 +14,7 @@
 ```
 pip install -e .                 # 只装核心（Python 标准库即可跑）
 pip install -e ".[serve,dev]"    # 需要 HTTP 服务 / 评测时再装依赖
-alaya serve --port 8770          # 起本地后端（默认只绑 127.0.0.1）
+rosmontis serve --port 8770          # 起本地后端（默认只绑 127.0.0.1）
 ```
 
 ---
@@ -23,7 +23,7 @@ alaya serve --port 8770          # 起本地后端（默认只绑 127.0.0.1）
 
 普通记忆系统只回答「哪段文字最像」。长期陪伴要回答四个：
 
-| 问题 | 普通方案 | Alaya |
+| 问题 | 普通方案 | Rosmontis |
 |---|---|---|
 | 他住哪 | 找最像的片段，可能翻出三年前那条 | 状态快照，只留当前 |
 | 他以前住哪 | 做不到 | 指定时刻的状态快照（as-of） |
@@ -43,9 +43,9 @@ alaya serve --port 8770          # 起本地后端（默认只绑 127.0.0.1）
 ### ① 当库用（Python）
 
 ```python
-import alaya
+import rosmontis
 
-h = alaya.open("alaya.db")          # 打开/新建记忆库（首次会建表）
+h = rosmontis.open("rosmontis.db")          # 打开/新建记忆库（首次会建表）
 h.wake("u1", "chat")                # 会话开始：载入人格与常驻块
 
 ctx = h.context("u1", "chat", "我最近搬到哪了？", budget=1200)   # 纯函数：不写库、不超预算
@@ -65,13 +65,13 @@ h.close()
 ### ② 当本地服务用（任意语言 / 任意前端）
 
 ```bash
-alaya serve --port 8770
-# 首次启动会打印本地访问 token，并写入 ~/.alaya/token。
+rosmontis serve --port 8770
+# 首次启动会打印本地访问 token，并写入 ~/.rosmontis/token。
 # 接口文档：http://127.0.0.1:8770/docs
 ```
 
 ```bash
-TOKEN=$(cat ~/.alaya/token)   # Windows: type %USERPROFILE%\.alaya\token
+TOKEN=$(cat ~/.rosmontis/token)   # Windows: type %USERPROFILE%\.rosmontis\token
 curl -X POST http://127.0.0.1:8770/v1/turn \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
@@ -96,7 +96,7 @@ Docker 一条命令（容器内绑定 `0.0.0.0`，入口会自动生成 token �
 
 ```bash
 docker compose up --build      # 只绑 127.0.0.1:8770，数据在 ./data
-docker compose logs alaya | grep token   # 取首次生成的 token
+docker compose logs rosmontis | grep token   # 取首次生成的 token
 ```
 
 前端只需要三类调用：**说话**（`/v1/turn` 或 `/v1/turn/stream` 流式）、**看**（`/v1/state`、`/v1/episodes`）、**打烊**（`/v1/session/sleep`）。
@@ -111,43 +111,45 @@ docker compose logs alaya | grep token   # 取首次生成的 token
 
 ## 配置
 
-全部可用环境变量覆盖（前缀 `ALAYA_`），完整表见 [docs/guides/api-reference.md](docs/guides/api-reference.md)。
+全部可用环境变量覆盖（前缀 `ROSMONTIS_`），完整表见 [docs/guides/api-reference.md](docs/guides/api-reference.md)。
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `ALAYA_DB` | `alaya.db` | 记忆库文件路径 |
-| `ALAYA_EMBED` | `ollama` | `ollama` / `hash`（离线确定性降级） |
-| `ALAYA_LLM_HOT` | `ollama` | 抽取与对话用的模型通道：`ollama` / `openai` / `rule` |
-| `ALAYA_OPENAI_BASE` / `_KEY` / `_MODEL` | — | 走 OpenAI 兼容接口时填 |
-| `ALAYA_DENSE_WINDOW` | `20000` | 向量检索近因窗口，调小更快但会牺牲久远记忆 |
-| `ALAYA_INBOX_RETRIEVABLE` | `false` | 速记层是否允许被检索（默认否） |
+| `ROSMONTIS_DB` | `rosmontis.db` | 记忆库文件路径 |
+| `ROSMONTIS_EMBED` | `ollama` | `ollama` / `hash`（离线确定性降级） |
+| `ROSMONTIS_LLM_HOT` | `ollama` | 抽取与对话用的模型通道：`ollama` / `openai` / `rule` |
+| `ROSMONTIS_OPENAI_BASE` / `_KEY` / `_MODEL` | — | 走 OpenAI 兼容接口时填 |
+| `ROSMONTIS_DENSE_WINDOW` | `20000` | 向量检索近因窗口，调小更快但会牺牲久远记忆 |
+| `ROSMONTIS_INBOX_RETRIEVABLE` | `false` | 速记层是否允许被检索（默认否） |
 
-离线可跑：`ALAYA_EMBED=hash ALAYA_LLM_HOT=rule`（质量降级，仅演示）。
+离线可跑：`ROSMONTIS_EMBED=hash ROSMONTIS_LLM_HOT=rule`（质量降级，仅演示）。
 
 ### 语义向量（模型作为可下载资产）
 
-模型**不打包进 wheel**，按需下载到本地（默认 `~/.alaya/models/`，可用 `ALAYA_MODEL_DIR` 指到已有目录）：
+模型**不打包进 wheel**，按需下载到本地（默认 `~/.rosmontis/models/`，可用 `ROSMONTIS_MODEL_DIR` 指到已有目录）：
 
 ```bash
-alaya models list                          # 可用模型与安装状态
-alaya models install bge-small-zh-v1.5     # 断点续传 + 重试 + SHA-256 校验；--mirror 可换镜像
-alaya models where bge-small-zh-v1.5       # 打印 onnx / tokenizer / 目录
-alaya models verify bge-small-zh-v1.5      # 校验文件完整性
+rosmontis models list                          # 可用模型与安装状态
+rosmontis models install bge-small-zh-v1.5     # 断点续传 + 重试 + SHA-256 校验；--mirror 可换镜像
+rosmontis models where bge-small-zh-v1.5       # 打印 onnx / tokenizer / 目录
+rosmontis models verify bge-small-zh-v1.5      # 校验文件完整性
 ```
 
 > **通道现状（v1.1.1）**：`ollama` 与 `hash` 可用。
 > `local`（本地 ONNX 进程内推理）与 `openai`（兼容 `/v1/embeddings`）**尚未实现**——配置这两个值会在启动时直接抛 `embed_provider_unavailable`，不会静默降级。
-> `alaya models install` 下载的模型目前**没有推理侧消费者**，请勿仅凭它判断本地语义检索可用。
-> `/readyz` 与 `context()` 都会报告 `vector_mode`（`semantic` / `degraded` / `misconfigured` / `none`）与待回算条目数。`misconfigured` 表示「配置的维度与模型实际输出不一致」——此时写入不落向量、回算会被跳过，请核对 `ALAYA_EMBED_DIM`，不要当成普通降级。
+> `rosmontis models install` 下载的模型目前**没有推理侧消费者**，请勿仅凭它判断本地语义检索可用。
+> `/readyz` 报告 `vector_mode`（`semantic` / `degraded` / `misconfigured` / `none`）、模型名、维度与待回算条目数（`null_vectors` + `stale_identity`）。
+> `context()` 的返回体带 `vector_mode` / `degraded` / `degraded_reason` 三个字段，库形态使用者不必起 HTTP 也能发现降级。
+> `misconfigured` 表示「配置的维度与模型实际输出不一致」——此时写入不落向量、回算会被跳过，请核对 `ROSMONTIS_EMBED_DIM`，不要当成普通降级。
 
 ---
 
 ## 运行与运维
 
 ```bash
-alaya serve --port 8770      # 本地服务（默认只绑 127.0.0.1）
-alaya daemon                 # 后台守护：自动整理/做梦/结算/遗忘（--once 只跑一拍）
-alaya backup                 # 备份（先 WAL checkpoint 再拷，运行中也安全）
+rosmontis serve --port 8770      # 本地服务（默认只绑 127.0.0.1）
+rosmontis daemon                 # 后台守护：自动整理/做梦/结算/遗忘（--once 只跑一拍）
+rosmontis backup                 # 备份（先 WAL checkpoint 再拷，运行中也安全）
 python run.py demo --reset   # 三个月对话演示（不需要模型）
 python -m unittest discover -s tests -p "test_*.py"   # 全部测试（184 项）
 python bench/run_eval.py     # 质量基准（200 段合成对话 / 135 题）
@@ -155,16 +157,16 @@ python bench/pareto.py       # 配置网格 → 帕累托前沿 → bench/report
 ```
 
 - 健康检查：`/healthz`（存活）、`/readyz`（库可读、schema 版本、降级状态）。
-- 任务与节拍：`GET /v1/jobs` 看积压；`POST /v1/settle` 立即返回 job_id；空闲超过 `ALAYA_IDLE_TIMEOUT`（默认 1800 秒）时 daemon 自动结算。
+- 任务与节拍：`GET /v1/jobs` 看积压；`POST /v1/settle` 立即返回 job_id；空闲超过 `ROSMONTIS_IDLE_TIMEOUT`（默认 1800 秒）时 daemon 自动结算。
 - 幂等：写接口（`/v1/episodes`、`/v1/turn`、`/v1/observe`、`/v1/settle`）支持 `Idempotency-Key`，24h 内同键回放且只写一条。
-- 备份：库里是 WAL 模式，**不要直接复制文件**；用 `alaya backup`（先 checkpoint 再复制并输出 sha256），恢复见 [docs/guides/operations.md](docs/guides/operations.md)。
+- 备份：库里是 WAL 模式，**不要直接复制文件**；用 `rosmontis backup`（先 checkpoint 再复制并输出 sha256），恢复见 [docs/guides/operations.md](docs/guides/operations.md)。
 - 升级旧库：首次打开会自动迁移格式；数据可弃时直接换个新库文件即可。
 
 ---
 
 ## 接口与版本
 
-- v1 冻结面：`/v1/*` 端点、五个工具（`alaya_remember/recall/promote/revise/skip`）、错误信封 `{ok,data,error{code,retryable,message}}`。
+- v1 冻结面：`/v1/*` 端点、五个工具（`rosmontis_remember/recall/promote/revise/skip`）、错误信封 `{ok,data,error{code,retryable,message}}`。
 - 破坏性改动升 `/v2`；库内部签名（`pipeline.*`、`field.*`）不承诺稳定。
 - OpenAPI 契约：`/docs`、`/openapi.json`，仓库内另存快照 `openapi.json`。
 

@@ -1,10 +1,10 @@
 """配置：环境变量优先，缺省值可直接跑。
 
-路径统一由 `ALAYA_HOME`（默认 `~/.alaya`）派生（P1-1）：
-- 数据库：`$ALAYA_HOME/alaya.db`（`ALAYA_DB` 可覆盖）
-- 模型：  `$ALAYA_HOME/models`（`ALAYA_MODEL_DIR` 可覆盖，与 alaya.models 一致）
-- token： `$ALAYA_HOME/token`（`ALAYA_TOKEN_FILE` 可覆盖）
-- .env：  `$ALAYA_HOME/.env`；开发态兼容仓库根 `.env`（`ALAYA_ENV_FILE` 可显式指定）
+路径统一由 `ROSMONTIS_HOME`（默认 `~/.rosmontis`）派生（P1-1）：
+- 数据库：`$ROSMONTIS_HOME/rosmontis.db`（`ROSMONTIS_DB` 可覆盖）
+- 模型：  `$ROSMONTIS_HOME/models`（`ROSMONTIS_MODEL_DIR` 可覆盖，与 rosmontis.models 一致）
+- token： `$ROSMONTIS_HOME/token`（`ROSMONTIS_TOKEN_FILE` 可覆盖）
+- .env：  `$ROSMONTIS_HOME/.env`；开发态兼容仓库根 `.env`（`ROSMONTIS_ENV_FILE` 可显式指定）
 
 pip 安装后 site-packages 不是配置目录，所以不再按包布局找 `.env` 作为主路径。
 """
@@ -19,13 +19,13 @@ _PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _home_dir() -> Path:
-    raw = (os.environ.get("ALAYA_HOME") or "").strip()
-    return Path(raw).expanduser() if raw else Path.home() / ".alaya"
+    raw = (os.environ.get("ROSMONTIS_HOME") or "").strip()
+    return Path(raw).expanduser() if raw else Path.home() / ".rosmontis"
 
 
 def _env_files() -> list[Path]:
-    """配置加载顺序：显式 ALAYA_ENV_FILE > $ALAYA_HOME/.env > 仓库根 .env（开发态）。"""
-    explicit = (os.environ.get("ALAYA_ENV_FILE") or "").strip()
+    """配置加载顺序：显式 ROSMONTIS_ENV_FILE > $ROSMONTIS_HOME/.env > 仓库根 .env（开发态）。"""
+    explicit = (os.environ.get("ROSMONTIS_ENV_FILE") or "").strip()
     if explicit:
         return [Path(explicit).expanduser()]
     out: list[Path] = []
@@ -174,94 +174,94 @@ class BudgetPlan:
 
 @dataclass
 class Config:
-    # 存储：默认落在 ALAYA_HOME（默认 ~/.alaya），不再依赖当前工作目录
-    db_path: str = field(default_factory=lambda: _env("ALAYA_DB", str(_home_dir() / "alaya.db")))
+    # 存储：默认落在 ROSMONTIS_HOME（默认 ~/.rosmontis），不再依赖当前工作目录
+    db_path: str = field(default_factory=lambda: _env("ROSMONTIS_DB", str(_home_dir() / "rosmontis.db")))
 
     # Embedding
-    embed_provider: str = field(default_factory=lambda: _env("ALAYA_EMBED", "ollama"))
-    embed_model: str = field(default_factory=lambda: _env("ALAYA_EMBED_MODEL", "bge-m3:latest"))
+    embed_provider: str = field(default_factory=lambda: _env("ROSMONTIS_EMBED", "ollama"))
+    embed_model: str = field(default_factory=lambda: _env("ROSMONTIS_EMBED_MODEL", "bge-m3:latest"))
     # 向量身份：写进 episode/fact.embed_model 的稳定标识。默认=模型名；
     # 换 embedding 档位（512/1024）或换渠道时显式设置，避免旧向量被静默混用。
-    embed_model_id: str = field(default_factory=lambda: _env("ALAYA_EMBED_MODEL_ID", ""))
-    embed_dim: int = field(default_factory=lambda: _envi("ALAYA_EMBED_DIM", 1024))
-    ollama_url: str = field(default_factory=lambda: _env("ALAYA_OLLAMA", "http://127.0.0.1:11434"))
-    embed_timeout: float = field(default_factory=lambda: _envf("ALAYA_EMBED_TIMEOUT", 8.0))
+    embed_model_id: str = field(default_factory=lambda: _env("ROSMONTIS_EMBED_MODEL_ID", ""))
+    embed_dim: int = field(default_factory=lambda: _envi("ROSMONTIS_EMBED_DIM", 1024))
+    ollama_url: str = field(default_factory=lambda: _env("ROSMONTIS_OLLAMA", "http://127.0.0.1:11434"))
+    embed_timeout: float = field(default_factory=lambda: _envf("ROSMONTIS_EMBED_TIMEOUT", 8.0))
     # >0 时按批调用，减少往返
-    embed_batch: int = field(default_factory=lambda: _envi("ALAYA_EMBED_BATCH", 8))
+    embed_batch: int = field(default_factory=lambda: _envi("ROSMONTIS_EMBED_BATCH", 8))
 
     # LLM：hot=每条消息的抽取，deep=冲突消解/重要度等关键判断
-    llm_hot: str = field(default_factory=lambda: _env("ALAYA_LLM_HOT", "ollama"))
-    llm_deep: str = field(default_factory=lambda: _env("ALAYA_LLM_DEEP", "ollama"))
-    llm_hot_model: str = field(default_factory=lambda: _env("ALAYA_LLM_HOT_MODEL", "minicpm5-2b:q8-64k"))
-    llm_deep_model: str = field(default_factory=lambda: _env("ALAYA_LLM_DEEP_MODEL", "minicpm5-2b:q8-64k"))
-    llm_timeout: float = field(default_factory=lambda: _envf("ALAYA_LLM_TIMEOUT", 45.0))
-    llm_temperature: float = field(default_factory=lambda: _envf("ALAYA_LLM_TEMP", 0.1))
+    llm_hot: str = field(default_factory=lambda: _env("ROSMONTIS_LLM_HOT", "ollama"))
+    llm_deep: str = field(default_factory=lambda: _env("ROSMONTIS_LLM_DEEP", "ollama"))
+    llm_hot_model: str = field(default_factory=lambda: _env("ROSMONTIS_LLM_HOT_MODEL", "minicpm5-2b:q8-64k"))
+    llm_deep_model: str = field(default_factory=lambda: _env("ROSMONTIS_LLM_DEEP_MODEL", "minicpm5-2b:q8-64k"))
+    llm_timeout: float = field(default_factory=lambda: _envf("ROSMONTIS_LLM_TIMEOUT", 45.0))
+    llm_temperature: float = field(default_factory=lambda: _envf("ROSMONTIS_LLM_TEMP", 0.1))
 
     # OpenAI 兼容通道（DeepSeek / 各家 relay 都走这套）
-    openai_base: str = field(default_factory=lambda: _env("ALAYA_OPENAI_BASE", ""))
-    openai_key: str = field(default_factory=lambda: _env("ALAYA_OPENAI_KEY", ""))
-    openai_model: str = field(default_factory=lambda: _env("ALAYA_OPENAI_MODEL", "deepseek-chat"))
+    openai_base: str = field(default_factory=lambda: _env("ROSMONTIS_OPENAI_BASE", ""))
+    openai_key: str = field(default_factory=lambda: _env("ROSMONTIS_OPENAI_KEY", ""))
+    openai_model: str = field(default_factory=lambda: _env("ROSMONTIS_OPENAI_MODEL", "deepseek-chat"))
 
     # 检索
-    recall_k_dense: int = field(default_factory=lambda: _envi("ALAYA_K_DENSE", 40))
-    recall_k_sparse: int = field(default_factory=lambda: _envi("ALAYA_K_SPARSE", 40))
-    recall_k_graph: int = field(default_factory=lambda: _envi("ALAYA_K_GRAPH", 30))
-    budget_tokens: int = field(default_factory=lambda: _envi("ALAYA_BUDGET", 1400))
+    recall_k_dense: int = field(default_factory=lambda: _envi("ROSMONTIS_K_DENSE", 40))
+    recall_k_sparse: int = field(default_factory=lambda: _envi("ROSMONTIS_K_SPARSE", 40))
+    recall_k_graph: int = field(default_factory=lambda: _envi("ROSMONTIS_K_GRAPH", 30))
+    budget_tokens: int = field(default_factory=lambda: _envi("ROSMONTIS_BUDGET", 1400))
     # dense 近因窗口：每次向量扫描最多取最近 N 条。调小能显著降延迟，但会牺牲
     # 很久以前但仍相关的记忆（时序题最敏感）。默认保持 20000；调参见 bench/pareto。
-    recall_dense_window: int = field(default_factory=lambda: _envi("ALAYA_DENSE_WINDOW", 20000))
-    mmr_lambda: float = field(default_factory=lambda: _envf("ALAYA_MMR", 0.72))
-    graph_hops: int = field(default_factory=lambda: _envi("ALAYA_HOPS", 2))
+    recall_dense_window: int = field(default_factory=lambda: _envi("ROSMONTIS_DENSE_WINDOW", 20000))
+    mmr_lambda: float = field(default_factory=lambda: _envf("ROSMONTIS_MMR", 0.72))
+    graph_hops: int = field(default_factory=lambda: _envi("ROSMONTIS_HOPS", 2))
     # 可见性（C2=B）：inbox 速记默认不参与召回；打开后允许检索（调试/回滚用）
-    inbox_retrievable: bool = field(default_factory=lambda: _envb("ALAYA_INBOX_RETRIEVABLE", False))
+    inbox_retrievable: bool = field(default_factory=lambda: _envb("ROSMONTIS_INBOX_RETRIEVABLE", False))
 
     # 遗忘
-    forget_archive_r: float = field(default_factory=lambda: _envf("ALAYA_ARCHIVE_R", 0.08))
-    forget_fold_r: float = field(default_factory=lambda: _envf("ALAYA_FOLD_R", 0.25))
-    forget_protect_salience: float = field(default_factory=lambda: _envf("ALAYA_PROTECT_sal", 0.8))
-    fold_min_members: int = field(default_factory=lambda: _envi("ALAYA_FOLD_MIN", 4))
-    decay_base_strength: float = field(default_factory=lambda: _envf("ALAYA_DECAY_BASE", 86400.0 * 21))
+    forget_archive_r: float = field(default_factory=lambda: _envf("ROSMONTIS_ARCHIVE_R", 0.08))
+    forget_fold_r: float = field(default_factory=lambda: _envf("ROSMONTIS_FOLD_R", 0.25))
+    forget_protect_salience: float = field(default_factory=lambda: _envf("ROSMONTIS_PROTECT_sal", 0.8))
+    fold_min_members: int = field(default_factory=lambda: _envi("ROSMONTIS_FOLD_MIN", 4))
+    decay_base_strength: float = field(default_factory=lambda: _envf("ROSMONTIS_DECAY_BASE", 86400.0 * 21))
 
     # 行为
     weights: ScoringWeights = field(default_factory=ScoringWeights)
     budget: BudgetPlan = field(default_factory=BudgetPlan)
     policy: RecallPolicy = field(default_factory=RecallPolicy)
-    use_llm_extract: bool = field(default_factory=lambda: _envb("ALAYA_LLM_EXTRACT", True))
-    use_llm_resolve: bool = field(default_factory=lambda: _envb("ALAYA_LLM_RESOLVE", False))
-    auto_forget: bool = field(default_factory=lambda: _envb("ALAYA_AUTO_FORGET", True))
-    log_level: str = field(default_factory=lambda: _env("ALAYA_LOG", "INFO"))
+    use_llm_extract: bool = field(default_factory=lambda: _envb("ROSMONTIS_LLM_EXTRACT", True))
+    use_llm_resolve: bool = field(default_factory=lambda: _envb("ROSMONTIS_LLM_RESOLVE", False))
+    auto_forget: bool = field(default_factory=lambda: _envb("ROSMONTIS_AUTO_FORGET", True))
+    log_level: str = field(default_factory=lambda: _env("ROSMONTIS_LOG", "INFO"))
 
     def __post_init__(self) -> None:
         # embed_model_id 缺省回落到模型名（模型安装器线可显式覆盖）
         if not (self.embed_model_id or "").strip():
             self.embed_model_id = self.embed_model
 
-    # ── ALAYA_HOME 派生路径（P1-1；app.py / cli.py / models.py 都从这里取）──
+    # ── ROSMONTIS_HOME 派生路径（P1-1；app.py / cli.py / models.py 都从这里取）──
     @staticmethod
     def home_dir() -> Path:
-        """运行时家目录：`ALAYA_HOME`，默认 `~/.alaya`（不自动创建）。"""
+        """运行时家目录：`ROSMONTIS_HOME`，默认 `~/.rosmontis`（不自动创建）。"""
         return _home_dir()
 
     @staticmethod
     def env_file() -> Path:
-        """配置目录里的 `.env`：显式 ALAYA_ENV_FILE，否则 `<home>/.env`（不创建文件）。
+        """配置目录里的 `.env`：显式 ROSMONTIS_ENV_FILE，否则 `<home>/.env`（不创建文件）。
 
         加载顺序（`_load_dotenv`）在 home/.env 不存在时会回落到仓库根 `.env`
         （开发态兼容）；`env_file()` 本身返回新部署应写入的位置。
         """
-        explicit = (os.environ.get("ALAYA_ENV_FILE") or "").strip()
+        explicit = (os.environ.get("ROSMONTIS_ENV_FILE") or "").strip()
         return Path(explicit).expanduser() if explicit else _home_dir() / ".env"
 
     @staticmethod
     def models_dir() -> Path:
-        """模型资产目录：`ALAYA_MODEL_DIR`，默认 `<home>/models`（与 alaya.models 一致）。"""
-        raw = (os.environ.get("ALAYA_MODEL_DIR") or "").strip()
+        """模型资产目录：`ROSMONTIS_MODEL_DIR`，默认 `<home>/models`（与 rosmontis.models 一致）。"""
+        raw = (os.environ.get("ROSMONTIS_MODEL_DIR") or "").strip()
         return Path(raw).expanduser() if raw else _home_dir() / "models"
 
     @staticmethod
     def token_file() -> Path:
-        """服务鉴权 token 文件：`ALAYA_TOKEN_FILE`，默认 `<home>/token`。"""
-        raw = (os.environ.get("ALAYA_TOKEN_FILE") or "").strip()
+        """服务鉴权 token 文件：`ROSMONTIS_TOKEN_FILE`，默认 `<home>/token`。"""
+        raw = (os.environ.get("ROSMONTIS_TOKEN_FILE") or "").strip()
         return Path(raw).expanduser() if raw else _home_dir() / "token"
 
     def as_dict(self) -> dict:

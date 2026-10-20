@@ -23,9 +23,9 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-from ..errors import AlayaError
+from ..errors import RosmontisError
 
-log = logging.getLogger("alaya.db")
+log = logging.getLogger("rosmontis.db")
 
 _SCHEMA_PATH = Path(__file__).resolve().parent.parent / "schema.sql"
 _schema_cache: str | None = None
@@ -34,7 +34,7 @@ _local = threading.local()
 
 SCHEMA_VERSION = 4
 
-# 与 alaya.core.gate.GATE_VERSION 保持一致（运行期从 gate 读取，这里是兜底常量）
+# 与 rosmontis.core.gate.GATE_VERSION 保持一致（运行期从 gate 读取，这里是兜底常量）
 _FALLBACK_GATE_VERSION = "3.0.0"
 
 
@@ -200,7 +200,7 @@ class SchemaVersionError(RuntimeError):
         self.supported = int(supported)
         super().__init__(
             f"数据库 schema 版本 v{version} 高于当前程序支持的 v{supported}，拒绝打开：{self.db_path}。"
-            f"请升级 alaya，或从迁移前的 .bak 备份恢复。"
+            f"请升级 rosmontis，或从迁移前的 .bak 备份恢复。"
         )
 
 
@@ -269,18 +269,29 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def backup_db(db_path: str, dest: str | Path | None = None, *, now: float | None = None) -> dict:
+def backup_db(db_path: str, dest: str | Path | None = None, *, now: float | None = None, overwrite: bool = False) -> dict:
     """在线备份记忆库并自检，返回 `{"path", "tables", "sha256"}`。
 
     为什么不用「WAL checkpoint + shutil.copy2」：并发读者在场时 checkpoint 返回
     busy，WAL 里未合并的帧不会进主库文件——复制出的 .bak 缺表缺数据，而调用方
     仍以为成功。`Connection.backup()` 是 SQLite 的在线备份，读一致快照，读者在场
     也能拿到完整库。备份后按核心表行数自检，不一致就当失败（不留半成品文件）。
+
+    目标文件的处理是**默认拒绝**（`overwrite=True` 才覆盖）：
+    - `dest` 指向源库自身 → 立刻报错。在线备份会在同一个文件上先读后写，互相
+      等锁，进程直接挂死（比报错难查得多）。
+    - `dest` 已存在 → 默认报错。备份 API 是"整库覆盖写"，一个手滑的 `-o` 就能把
+      上一份好备份清空，而且退出码还是 0。
     """
     src_path = os.path.abspath(str(db_path))
     if not os.path.exists(src_path):
         raise BackupError(f"库不存在，无法备份：{src_path}")
     target = Path(dest) if dest is not None else _backup_name(src_path, now)
+    target_abs = os.path.abspath(str(target))
+    if os.path.normcase(target_abs) == os.path.normcase(src_path):
+        raise BackupError(f"不能备份到源库自身：{target_abs}")
+    if os.path.exists(target_abs) and not overwrite:
+        raise BackupError(f"目标文件已存在，拒绝覆盖：{target_abs}（确实要覆盖请显式传 overwrite=True）")
 
     src: sqlite3.Connection | None = None
     dst: sqlite3.Connection | None = None
@@ -338,7 +349,7 @@ def _remove_quietly(path: Path) -> None:
 
 
 def _backup_before_migration(db_path: str, now: float | None = None) -> str | None:
-    """迁移前备份：走与 `alaya backup` 同一条在线备份实现。
+    """迁移前备份：走与 `rosmontis backup` 同一条在线备份实现。
 
     没有备份就不许迁移（P1-3）：备份失败会抛 `BackupError` 中断迁移。
     """
@@ -613,7 +624,7 @@ def _backfill_state_log(conn: sqlite3.Connection, now: float) -> None:
 def tx(db_path: str):
     """写事务。遇到临时锁冲突自动退避重试（并发写入实测有 3.75% 失败率）。
 
-    重试耗尽的锁冲突包成 `AlayaError("db_locked", retryable=True)`：裸
+    重试耗尽的锁冲突包成 `RosmontisError("db_locked", retryable=True)`：裸
     `sqlite3.OperationalError` 会漏到 HTTP/CLI 层变成 500 加一段 SQLite 内部
     文案，调用方既判不出"能不能重试"，也拿不到稳定的错误码。
     """
@@ -633,7 +644,7 @@ def tx(db_path: str):
                 continue
             raise
     if not acquired:
-        raise AlayaError(
+        raise RosmontisError(
             "db_locked",
             f"数据库被其它进程占用，重试后仍无法开启写事务：{last_err}",
             retryable=True,

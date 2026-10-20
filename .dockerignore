@@ -11,8 +11,8 @@ build
 dist
 node_modules
 bench/_profile
-alaya.db
-alaya.db-*
+rosmontis.db
+rosmontis.db-*
 *.db
 *.db-wal
 *.db-shm

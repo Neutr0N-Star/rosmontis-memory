@@ -13,7 +13,7 @@
 - `turn(user_text, session_id, *, history=None, extra_system=None)`：
   历史缺口已补，宿主可以把上一轮的 messages 直接递进来。
 - `build_context(...)`：上下文组装是**公开的模块级函数**，不再埋在 turn 里；
-  `pure=True` 时走纯函数路径（不写 retrieval_log），供 alaya/api.py 与四钩子宿主复用。
+  `pure=True` 时走纯函数路径（不写 retrieval_log），供 rosmontis/api.py 与四钩子宿主复用。
 - `llm_callable(messages, tools) -> dict`：返回值可以带 `usage` 与 `finish_reason`，
   缺省也不会崩；`tool_calls` 既接受 OpenAI 原生格式，也接受
   `[{"name","arguments"}]` 的扁平格式，内部统一补 `id`/`tool_call_id`。
@@ -38,7 +38,7 @@ from .core.memory import Memory
 from .core.score import estimate_tokens
 from .tools import TOOLS, dispatch
 
-log = logging.getLogger("alaya.harness")
+log = logging.getLogger("rosmontis.harness")
 
 MAX_TOOL_ROUNDS = 3
 # history 只带最近这么多条，防止宿主把整个上下文塞进来把预算撑爆
@@ -48,7 +48,7 @@ MAX_HISTORY_MESSAGES = 40
 class LLMUnavailableError(RuntimeError):
     """没有真实模型输出：`llm_callable` 未配置 / 调用失败 / 返回既无 content 也无 tool_calls。
 
-    引擎层的明确信号：调用方（`alaya.api.Handle` / HTTP 层）据此回 `llm_unavailable`
+    引擎层的明确信号：调用方（`rosmontis.api.Handle` / HTTP 层）据此回 `llm_unavailable`
     与 503，**绝不**把占位文本当回复写进长期记忆。
     """
 

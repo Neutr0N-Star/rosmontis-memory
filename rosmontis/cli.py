@@ -1,6 +1,6 @@
 """命令行入口。
 
-python -m alaya.cli <命令>
+python -m rosmontis.cli <命令>
 或者 python run.py <命令>
 """
 
@@ -47,14 +47,14 @@ def bind_security_error(host: str, explicit_token: str | None) -> str | None:
     if (explicit_token or "").strip():
         return None
     return (
-        f"拒绝启动：--host {host} 不是回环地址，且未提供 --token 或 ALAYA_TOKEN。\n"
+        f"拒绝启动：--host {host} 不是回环地址，且未提供 --token 或 ROSMONTIS_TOKEN。\n"
         "本机使用请加 --host 127.0.0.1；确实要对外监听请显式给 token：\n"
-        "  alaya serve --host 0.0.0.0 --token <你的token>   # 或设置 ALAYA_TOKEN"
+        "  rosmontis serve --host 0.0.0.0 --token <你的token>   # 或设置 ROSMONTIS_TOKEN"
     )
 
 
 def cmd_serve(args) -> int:
-    explicit_token = (getattr(args, "token", None) or os.environ.get("ALAYA_TOKEN") or "").strip()
+    explicit_token = (getattr(args, "token", None) or os.environ.get("ROSMONTIS_TOKEN") or "").strip()
     bind_error = bind_security_error(getattr(args, "host", "127.0.0.1"), explicit_token)
     if bind_error:
         print(bind_error, file=sys.stderr)
@@ -64,6 +64,28 @@ def cmd_serve(args) -> int:
     except ImportError:
         print("缺少 uvicorn。装一下：pip install uvicorn fastapi")
         return 1
+
+    # 启动即校验 embedding provider：文档承诺"配置未实现的通道即启动失败"，
+    # 而 service.app 的 Memory 是懒加载的——不在这里拦，进程会好好活着，
+    # 直到第一轮对话才 503，用户以为服务正常。构造一次 Embedder 就够（不联网、不开库）。
+    try:
+        _cfg = Config()
+        from .core.embed import Embedder
+
+        Embedder(
+            provider=_cfg.embed_provider,
+            model=_cfg.embed_model,
+            dim=_cfg.embed_dim,
+            ollama_url=_cfg.ollama_url,
+            timeout=_cfg.embed_timeout,
+            model_id=_cfg.embed_model_id,
+        )
+    except Exception as e:  # 含 AlayaError("embed_provider_unavailable")
+        code = getattr(e, "code", "")
+        msg = getattr(e, "message", None) or str(e)
+        print(f"拒绝启动：{f'[{code}] ' if code else ''}{msg}", file=sys.stderr)
+        return 1
+
     try:
         from .service.app import ensure_local_token, token_path
     except ImportError as e:  # 服务依赖缺失时给明确提示，不抛栈
@@ -72,20 +94,20 @@ def cmd_serve(args) -> int:
 
     if explicit_token:
         token = explicit_token
-        os.environ["ALAYA_TOKEN"] = token
-        print("认证：使用显式 token（--token / ALAYA_TOKEN，值不打印）", flush=True)
+        os.environ["ROSMONTIS_TOKEN"] = token
+        print("认证：使用显式 token（--token / ROSMONTIS_TOKEN，值不打印）", flush=True)
     else:
         try:
             token = ensure_local_token()
         except Exception as e:
             print(f"生成本地 token 失败：{type(e).__name__}: {e}", file=sys.stderr)
             return 2
-        os.environ["ALAYA_TOKEN"] = token
+        os.environ["ROSMONTIS_TOKEN"] = token
         print(f"本地访问 token（首次生成，已写入 {token_path()}）：{token}", flush=True)
 
-    print(f"藏识 Alaya 启动中 → http://{args.host}:{args.port}", flush=True)
+    print(f"藏识 Rosmontis 启动中 → http://{args.host}:{args.port}", flush=True)
     print(f"接口文档 → http://{args.host}:{args.port}/docs", flush=True)
-    uvicorn.run("alaya.service.app:app", host=args.host, port=args.port, reload=args.reload, log_level="info")
+    uvicorn.run("rosmontis.service.app:app", host=args.host, port=args.port, reload=args.reload, log_level="info")
     return 0
 
 
@@ -157,12 +179,12 @@ def daemon_heartbeat(
     owner = _daemon_owner(owner)
     idle_timeout = jobs.idle_timeout_from_env() if idle_timeout is None else float(idle_timeout)
     max_age = (
-        _env_float("ALAYA_SESSION_MAX_AGE", 86400.0)
+        _env_float("ROSMONTIS_SESSION_MAX_AGE", 86400.0)
         if max_session_age is None
         else float(max_session_age)
     )
     forget_interval = (
-        _env_float("ALAYA_FORGET_INTERVAL", jobs.DEFAULT_FORGET_INTERVAL)
+        _env_float("ROSMONTIS_FORGET_INTERVAL", jobs.DEFAULT_FORGET_INTERVAL)
         if forget_interval is None
         else float(forget_interval)
     )
@@ -397,7 +419,7 @@ def cmd_models(args) -> int:
             flag = "已安装" if r["installed"] else "未安装"
             note = f"  {r['note']}" if r.get("note") else ""
             print(f"  {r['name']:<22} {r['dim']:>4}d  ~{r['approx_mb']}MB  {flag}{note}")
-        print(f"默认：{M.DEFAULT_MODEL}    安装：alaya models install {M.DEFAULT_MODEL}")
+        print(f"默认：{M.DEFAULT_MODEL}    安装：rosmontis models install {M.DEFAULT_MODEL}")
         return 0
 
     if cmd == "install":
@@ -458,7 +480,7 @@ def cmd_backup(args) -> int:
     """
     from .core import db as DB
 
-    db_path = args.db or os.environ.get("ALAYA_DB") or "alaya.db"
+    db_path = args.db or os.environ.get("ROSMONTIS_DB") or "rosmontis.db"
     if not os.path.exists(db_path):
         print(f"库不存在：{db_path}")
         return 1
@@ -543,7 +565,7 @@ def cmd_demo(args) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="alaya", description="藏识 Alaya — 长期记忆系统")
+    p = argparse.ArgumentParser(prog="rosmontis", description="藏识 Rosmontis — 长期记忆系统")
     p.add_argument("--db", default=None, help="数据库路径")
     p.add_argument(
         "--version", "-V",
@@ -558,7 +580,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--reload", action="store_true")
     s.add_argument(
         "--token", default=None,
-        help="显式访问 token（非回环 --host 必须给；也可用 ALAYA_TOKEN）",
+        help="显式访问 token（非回环 --host 必须给；也可用 ROSMONTIS_TOKEN）",
     )
     s.set_defaults(func=cmd_serve)
 
@@ -569,10 +591,10 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--once", action="store_true", help="只跑一拍后退出（测试/验收用）")
     s.add_argument("--interval", type=float, default=60.0, help="心跳间隔秒数（默认 60）")
     s.add_argument("--idle-timeout", type=float, default=None,
-                   help="空闲多少秒触发 settle（默认 ALAYA_IDLE_TIMEOUT 或 1800）")
+                   help="空闲多少秒触发 settle（默认 ROSMONTIS_IDLE_TIMEOUT 或 1800）")
     s.add_argument("--limit", type=int, default=20, help="单拍最多执行多少 job")
     s.add_argument("--owner", default=None, help="租约持有者标识（默认 主机名:pid）")
-    # 兼容 `alaya daemon --db X`（全局 --db 也必须可用；SUPPRESS 避免覆盖全局值）
+    # 兼容 `rosmontis daemon --db X`（全局 --db 也必须可用；SUPPRESS 避免覆盖全局值）
     s.add_argument("--db", default=argparse.SUPPRESS, help="数据库路径（等价于全局 --db）")
     s.set_defaults(func=cmd_daemon)
 
@@ -593,7 +615,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(func=cmd_stats)
 
     s = sub.add_parser("backup", help="备份记忆库（先 checkpoint WAL 再复制，运行中也安全）")
-    s.add_argument("--db", default=None, help="库文件路径（默认 env ALAYA_DB 或 alaya.db）")
+    s.add_argument("--db", default=None, help="库文件路径（默认 env ROSMONTIS_DB 或 rosmontis.db）")
     s.add_argument("--out", default=None, help="输出文件（默认 <库文件名>.<时间戳>.bak）")
     s.set_defaults(func=cmd_backup)
 
@@ -601,13 +623,13 @@ def build_parser() -> argparse.ArgumentParser:
     ms = s.add_subparsers(dest="models_cmd", required=True)
 
     m = ms.add_parser("list", help="列出可用模型与安装状态")
-    m.add_argument("--dir", default=None, help="模型目录（默认 ALAYA_MODEL_DIR 或 ~/.alaya/models）")
+    m.add_argument("--dir", default=None, help="模型目录（默认 ROSMONTIS_MODEL_DIR 或 ~/.rosmontis/models）")
     m.set_defaults(func=cmd_models)
 
     m = ms.add_parser("install", help="下载并校验一个模型（支持断点续传与镜像）")
     m.add_argument("name", nargs="?", default="bge-small-zh-v1.5")
     m.add_argument("--dir", default=None)
-    m.add_argument("--mirror", default=None, help="镜像根地址（默认 ALAYA_MODEL_MIRROR 或 huggingface.co）")
+    m.add_argument("--mirror", default=None, help="镜像根地址（默认 ROSMONTIS_MODEL_MIRROR 或 huggingface.co）")
     m.add_argument("--force", action="store_true", help="强制重新下载")
     m.set_defaults(func=cmd_models)
 
@@ -662,13 +684,13 @@ def main(argv: list[str] | None = None) -> int:
     # --version 必须在 argparse 的 required subparser 之前拦截，且输出缩进
     # 不被 HelpFormatter 折行（要求恰好两个空格）。
     if "--version" in argv or "-V" in argv:
-        print(f"alaya {__version__}  (api v{api_version})")
+        print(f"rosmontis {__version__}  (api v{api_version})")
         return 0
     args = build_parser().parse_args(argv)
     if getattr(args, "db", None):
         import os
 
-        os.environ["ALAYA_DB"] = args.db
+        os.environ["ROSMONTIS_DB"] = args.db
     return args.func(args)
 
 

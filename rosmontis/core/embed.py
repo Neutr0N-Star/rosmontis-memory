@@ -23,10 +23,10 @@ import urllib.error
 import urllib.request
 from collections import OrderedDict
 
-from ..errors import AlayaError
+from ..errors import RosmontisError
 from . import vec as V
 
-log = logging.getLogger("alaya.embed")
+log = logging.getLogger("rosmontis.embed")
 
 # provider 扩展点：仅登记内置实现；新 provider（如 local/onnx）由独立工作线注册。
 # 契约：对象需提供 embed(text) -> list[float] | None；可选 embed_many。
@@ -37,7 +37,7 @@ provider_registry: dict[str, str] = {
 }
 
 
-class EmbedProviderError(AlayaError):
+class EmbedProviderError(RosmontisError):
     """配置了未注册的 provider：启动即失败，不静默降级成 hash。
 
     静默换 hash 的代价是"以为在跑语义检索、实际全库不落向量"，运维在
@@ -194,7 +194,7 @@ class Embedder:
                 # 造出一堆无意义向量），而是标记出来让 /readyz 与 context() 说话。
                 self.dim_mismatch = (
                     f"embed_dim 配置为 {self.dim}，但模型返回 {len(v)} 维；"
-                    f"请核对 ALAYA_EMBED_DIM 与 {self.model_id or self.model} 的实际维度"
+                    f"请核对 ROSMONTIS_EMBED_DIM 与 {self.model_id or self.model} 的实际维度"
                 )
                 self.degraded = True
                 self.degraded_reason = self.dim_mismatch

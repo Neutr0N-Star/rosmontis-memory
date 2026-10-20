@@ -106,7 +106,7 @@ def _pick(rng: random.Random, pool: list[str], n: int) -> list[str]:
 
 
 def _norm(s: str) -> str:
-    """与 alaya.core.ids.normalize 同口径的轻量实现（生成器不依赖核心代码）。"""
+    """与 rosmontis.core.ids.normalize 同口径的轻量实现（生成器不依赖核心代码）。"""
     return "".join(ch for ch in str(s or "").lower() if not ch.isspace())
 
 
@@ -753,7 +753,7 @@ def generate() -> dict:
     _dump_jsonl(QUEST_PATH, questions)
 
     manifest = {
-        "name": "alaya-bench-synthetic-v1",
+        "name": "rosmontis-bench-synthetic-v1",
         "version": 1,
         "seed": SEED,
         "generator": "bench/dataset/gen_dataset.py",
@@ -786,7 +786,7 @@ def generate() -> dict:
 def main() -> int:
     m = generate()
     print("=" * 64)
-    print("alaya-bench 合成评测集已生成")
+    print("rosmontis-bench 合成评测集已生成")
     print("=" * 64)
     print(f"种子           : {m['seed']}")
     print(f"会话 / 对话    : {m['sessions']} / {m['dialogues']} 段（{m['turns']} turn）")

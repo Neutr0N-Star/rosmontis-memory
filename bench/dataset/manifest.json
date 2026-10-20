@@ -15,7 +15,7 @@
   "generator": "bench/dataset/gen_dataset.py",
   "horizon_days": 180,
   "labels": "程序化金标：生成时由模板同步写出，非人工标注；抽取/检索判定口径见 bench/report.md",
-  "name": "alaya-bench-synthetic-v1",
+  "name": "rosmontis-bench-synthetic-v1",
   "now_ts": 1783213200.0,
   "questions": 135,
   "questions_by_category": {

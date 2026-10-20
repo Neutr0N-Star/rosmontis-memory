@@ -1,12 +1,12 @@
 ﻿"""评测公共设施：数据集加载、可插拔后端、临时库构建、配置注入、指标计算。
 
 设计要点
-- **只读核心**：本模块只 import / 调用 ``alaya/``，不写其中任何文件。
+- **只读核心**：本模块只 import / 调用 ``rosmontis/``，不写其中任何文件。
 - **可插拔**：抽取后端 ``scripted | rule | llm``；embedding ``hash | ollama``。
   没有模型时走脚本化金标 + 规则抽取 + 哈希向量，绝不因缺 Ollama / 网络而崩。
 - **可复现**：脚本化金标与哈希向量都是确定性的；时间旅行通过给
   ``write.ingest(now=t_event)`` 传入事件时间来实现，因此不依赖评测当天日期。
-- **配置注入**：扩散开关走 ``ALAYA_FIELD``（核心 field.enabled 原生支持）；
+- **配置注入**：扩散开关走 ``ROSMONTIS_FIELD``（核心 field.enabled 原生支持）；
   扩散强度 D 改 ``memory_field.DEFAULT_GAMMA``；迭代次数/检索深度/预算倍率
   通过替换 ``recall.REFLEX_DEPTH`` 的副本实现（评测结束恢复原对象）。
 """
@@ -41,22 +41,22 @@ if str(DATASET_DIR) not in sys.path:
 
 import gen_dataset  # noqa: E402  (bench/dataset/gen_dataset.py)
 
-from alaya import __version__ as ALAYA_VERSION  # noqa: E402
-from alaya.config import Config  # noqa: E402
-from alaya.core import db as DB  # noqa: E402
-from alaya.core import extract as EX  # noqa: E402
-from alaya.core import field as FD  # noqa: E402
-from alaya.core import ids as IDS  # noqa: E402
-from alaya.core import memory_field as MF  # noqa: E402
-from alaya.core import pages as PAG  # noqa: E402
-from alaya.core import recall as RC  # noqa: E402
-from alaya.core import write as WR  # noqa: E402
-from alaya.core.embed import Embedder  # noqa: E402
-from alaya.core.llm import LLM  # noqa: E402
+from rosmontis import __version__ as ROSMONTIS_VERSION  # noqa: E402
+from rosmontis.config import Config  # noqa: E402
+from rosmontis.core import db as DB  # noqa: E402
+from rosmontis.core import extract as EX  # noqa: E402
+from rosmontis.core import field as FD  # noqa: E402
+from rosmontis.core import ids as IDS  # noqa: E402
+from rosmontis.core import memory_field as MF  # noqa: E402
+from rosmontis.core import pages as PAG  # noqa: E402
+from rosmontis.core import recall as RC  # noqa: E402
+from rosmontis.core import write as WR  # noqa: E402
+from rosmontis.core.embed import Embedder  # noqa: E402
+from rosmontis.core.llm import LLM  # noqa: E402
 
 # 评测是脚本，不需要核心的 INFO/WARNING 日志；降级状态写进 JSON（embed_health / notes）。
-logging.getLogger("alaya").setLevel(logging.ERROR)
-logging.getLogger("alaya.embed").setLevel(logging.ERROR)
+logging.getLogger("rosmontis").setLevel(logging.ERROR)
+logging.getLogger("rosmontis.embed").setLevel(logging.ERROR)
 
 EMPTY_GOLD = {"entities": [], "facts": [], "state_changes": [], "theme": None}
 CATEGORIES = ("temporal", "update", "preference", "multi_hop", "abstain")
@@ -212,7 +212,7 @@ class EvalConfig:
     """一组可比较的检索配置。None 表示沿用产品默认值。"""
 
     name: str
-    field: str = "on"             # on / off（ALAYA_FIELD）
+    field: str = "on"             # on / off（ROSMONTIS_FIELD）
     gamma: float | None = None    # 扩散强度 D（memory_field.DEFAULT_GAMMA）
     hops: int | None = None       # 扩散迭代次数（REFLEX_DEPTH[*].hops）
     dense_k: int | None = None    # 向量路 top-k（统一档位时生效）
@@ -230,14 +230,14 @@ class EvalConfig:
 def field_backend_info() -> dict:
     rec = RC
     return {
-        "module": "alaya.core.field",
+        "module": "rosmontis.core.field",
         "native_switch": hasattr(FD, "enabled"),
         "has_propagate": hasattr(FD, "propagate"),
         "has_seed_nodes": hasattr(FD, "seed_nodes"),
         "recall_uses_field": hasattr(rec, "_field_route"),
         "iterations_source": "REFLEX_DEPTH[*].hops",
         "decay_source": "memory_field.DEFAULT_GAMMA",
-        "note": "场代码已落地时 ALAYA_FIELD 由核心 field.enabled 原生支持；未落地时本脚本退化为关掉图扩散",
+        "note": "场代码已落地时 ROSMONTIS_FIELD 由核心 field.enabled 原生支持；未落地时本脚本退化为关掉图扩散",
     }
 
 
@@ -245,13 +245,13 @@ def field_backend_info() -> dict:
 def applied_config(ec: EvalConfig, cfg: Config | None = None):
     """临时应用配置，退出时恢复（不修改任何源文件）。"""
     applied = {"field_env": None, "gamma_patched": False, "depth_patched": False, "theta_patched": False}
-    old_env = os.environ.get("ALAYA_FIELD")
+    old_env = os.environ.get("ROSMONTIS_FIELD")
     old_depth = getattr(RC, "REFLEX_DEPTH", None)
     old_gamma = getattr(MF, "DEFAULT_GAMMA", None)
     old_theta = getattr(getattr(cfg, "weights", None), "theta_abstain", None) if cfg is not None else None
     try:
-        os.environ["ALAYA_FIELD"] = "0" if ec.field == "off" else "1"
-        applied["field_env"] = os.environ["ALAYA_FIELD"]
+        os.environ["ROSMONTIS_FIELD"] = "0" if ec.field == "off" else "1"
+        applied["field_env"] = os.environ["ROSMONTIS_FIELD"]
         if ec.theta_abstain is not None and cfg is not None and old_theta is not None:
             cfg.weights.theta_abstain = float(ec.theta_abstain)
             applied["theta_patched"] = True
@@ -282,9 +282,9 @@ def applied_config(ec: EvalConfig, cfg: Config | None = None):
         if old_gamma is not None:
             MF.DEFAULT_GAMMA = old_gamma
         if old_env is None:
-            os.environ.pop("ALAYA_FIELD", None)
+            os.environ.pop("ROSMONTIS_FIELD", None)
         else:
-            os.environ["ALAYA_FIELD"] = old_env
+            os.environ["ROSMONTIS_FIELD"] = old_env
 
 
 def clear_retrieval_log(cfg: Config) -> None:
@@ -326,7 +326,7 @@ def make_config(db_path: str, *, embed_provider: str = "hash", embed_dim: int = 
 
 def build_eval_db(data: dict, *, backend: str = "scripted", embed_provider: str = "hash", limit: int = 0) -> EvalDB:
     """把对话写入临时 SQLite 库。time-travel 通过 t_ingest=t_event+120s 实现。"""
-    tempdir = tempfile.mkdtemp(prefix="alaya_bench_")
+    tempdir = tempfile.mkdtemp(prefix="rosmontis_bench_")
     db_path = os.path.join(tempdir, "eval.db")
     cfg = make_config(db_path, embed_provider=embed_provider)
     t0 = time.perf_counter()
@@ -483,7 +483,7 @@ def measure_extraction(conversations: list[dict], *, backend: str = "rule", limi
                 llm = LLM(
                     provider="ollama",
                     model="minicpm5-2b:q8-64k",
-                    ollama_url=os.environ.get("ALAYA_OLLAMA", "http://127.0.0.1:11434"),
+                    ollama_url=os.environ.get("ROSMONTIS_OLLAMA", "http://127.0.0.1:11434"),
                     timeout=10.0,
                 )
                 if not llm.available():
@@ -904,7 +904,7 @@ def environment_info() -> dict:
     except Exception:
         numpy_version = None
     try:
-        from alaya.core.text import _HAS_JIEBA  # noqa: PLC0415
+        from rosmontis.core.text import _HAS_JIEBA  # noqa: PLC0415
 
         jieba = bool(_HAS_JIEBA)
     except Exception:
@@ -914,16 +914,16 @@ def environment_info() -> dict:
         "platform": sys.platform,
         "numpy": numpy_version,
         "jieba": jieba,
-        "alaya_version": ALAYA_VERSION,
+        "rosmontis_version": ROSMONTIS_VERSION,
         "embed_default": "hash（无 Ollama 时哈希伪向量，核心不落库向量 → 稠密路退化）",
         "PYTHONIOENCODING": os.environ.get("PYTHONIOENCODING", ""),
-        "ALAYA_FIELD": os.environ.get("ALAYA_FIELD", ""),
+        "ROSMONTIS_FIELD": os.environ.get("ROSMONTIS_FIELD", ""),
     }
 
 
 def code_fingerprint() -> dict:
     out: dict = {"git_head": None, "dirty_core_files": [], "git_ok": False, "core_files": {}}
-    for p in sorted((ROOT / "alaya").rglob("*.py")):
+    for p in sorted((ROOT / "rosmontis").rglob("*.py")):
         rel = p.relative_to(ROOT).as_posix()
         out["core_files"][rel] = _sha256(p)
     try:
@@ -938,7 +938,7 @@ def code_fingerprint() -> dict:
             out["git_ok"] = True
         if status.returncode == 0:
             out["dirty_core_files"] = [
-                line[3:].strip() for line in status.stdout.splitlines() if line[3:].strip().startswith("alaya/")
+                line[3:].strip() for line in status.stdout.splitlines() if line[3:].strip().startswith("rosmontis/")
             ]
     except Exception as exc:  # git 不可用不影响评测
         out["git_error"] = f"{type(exc).__name__}: {exc}"

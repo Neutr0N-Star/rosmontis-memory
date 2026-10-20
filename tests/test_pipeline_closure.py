@@ -1,14 +1,14 @@
 """WS-A2 收口验收：dream/forget 改道统一管线 + enrich 后重算 salience。
 
 对应 `docs/14 §2.3` 未收口清单与评审 B4：
-- 全仓扫描：`INSERT INTO episode` 只允许出现在 `alaya/core/pipeline.py`；
+- 全仓扫描：`INSERT INTO episode` 只允许出现在 `rosmontis/core/pipeline.py`；
 - dream 产物：origin='dream' / state='dream' / 1 条 item_state_log；
 - forget 折叠摘要：origin='summary' / role='summary' / 1 条 create 日志；
 - forget 归档：状态机 archive（state=archived + 1 条 archive 日志），不再直写 archived=1；
 - B4：异步 enrich 完成后同事务重算 salience，同步 ingest 与 ingest_async 同输入 enrich 后差 = 0。
 
 运行：`PYTHONIOENCODING=utf-8 python tests/test_pipeline_closure.py`
-不依赖 Ollama / 网络；全部用临时库，不碰 alaya.db。
+不依赖 Ollama / 网络；全部用临时库，不碰 rosmontis.db。
 """
 
 from __future__ import annotations
@@ -25,13 +25,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from alaya import Config  # noqa: E402
-from alaya.core import db as DB  # noqa: E402
-from alaya.core import forget as FG  # noqa: E402
-from alaya.core import item as IT  # noqa: E402
-from alaya.core import pipeline as TR  # noqa: E402
-from alaya.core import write as WR  # noqa: E402
-from alaya.core.memory import Memory  # noqa: E402
+from rosmontis import Config  # noqa: E402
+from rosmontis.core import db as DB  # noqa: E402
+from rosmontis.core import forget as FG  # noqa: E402
+from rosmontis.core import item as IT  # noqa: E402
+from rosmontis.core import pipeline as TR  # noqa: E402
+from rosmontis.core import write as WR  # noqa: E402
+from rosmontis.core.memory import Memory  # noqa: E402
 
 INSERT_EPISODE_RE = re.compile(r"INSERT\s+(?:OR\s+\w+\s+)?INTO\s+episode\b", re.IGNORECASE)
 UPDATE_ARCHIVED_RE = re.compile(r"UPDATE\s+episode\s+SET\s+archived\s*=\s*1", re.IGNORECASE)
@@ -67,7 +67,7 @@ class FakeLLM:
 
 
 def mk(tag: str) -> tuple[Memory, FakeLLM, str]:
-    d = tempfile.mkdtemp(prefix=f"alaya_{tag}_")
+    d = tempfile.mkdtemp(prefix=f"rosmontis_{tag}_")
     cfg = Config(
         db_path=os.path.join(d, "t.db"),
         embed_provider="hash",
@@ -107,7 +107,7 @@ def teardown(m: Memory | None, d: str) -> None:
 # ── 1 全仓扫描：唯一写入点 ─────────────────────────────────────
 class TestFullRepoScan(unittest.TestCase):
     def _scan_roots(self) -> list[Path]:
-        roots = [ROOT / "alaya"]
+        roots = [ROOT / "rosmontis"]
         for extra in ("bench", "examples"):
             p = ROOT / extra
             if p.exists():
@@ -129,18 +129,18 @@ class TestFullRepoScan(unittest.TestCase):
                     hits.add(rel)
         self.assertEqual(
             hits,
-            {"alaya/core/pipeline.py"},
-            f"存在绕过统一管线的 episode 直写点：{sorted(hits - {'alaya/core/pipeline.py'})}",
+            {"rosmontis/core/pipeline.py"},
+            f"存在绕过统一管线的 episode 直写点：{sorted(hits - {'rosmontis/core/pipeline.py'})}",
         )
 
     def test_dream_forget_have_no_direct_episode_write(self):
-        for rel in ("alaya/core/dream.py", "alaya/core/forget.py"):
+        for rel in ("rosmontis/core/dream.py", "rosmontis/core/forget.py"):
             text = (ROOT / rel).read_text(encoding="utf-8")
             self.assertIsNone(
                 INSERT_EPISODE_RE.search(text),
                 f"{rel} 仍存在 INSERT INTO episode",
             )
-        forget_text = (ROOT / "alaya/core/forget.py").read_text(encoding="utf-8")
+        forget_text = (ROOT / "rosmontis/core/forget.py").read_text(encoding="utf-8")
         self.assertIsNone(
             UPDATE_ARCHIVED_RE.search(forget_text),
             "forget.py 仍在直写 archived=1，应改走 pipeline.transition('archive')",
@@ -184,7 +184,7 @@ class TestDreamClosure(unittest.TestCase):
     def test_dream_is_idempotent_within_same_second(self):
         m, fake, d = mk("dream2")
         try:
-            from alaya.core import dream as DM
+            from rosmontis.core import dream as DM
 
             now = time.time()
             for i in range(5):
